@@ -53,7 +53,7 @@ class BLSTMEncoder(nn.Module):
 
         # Initialize the Embedding Layer with Glove word vecs
         for i in ix_to_word:
-            self.emb_layer.weight.data[i,:] = torch.FloatTensor(word_vecs[ix_to_word[i]])
+            self.emb_layer.weight.data[i,:] = torch.FloatTensor(word_vecs[ix_to_word[i]]) # TODO: refactor .data
         del word_vecs
         del word_to_ix_local
 
@@ -253,7 +253,7 @@ class BLSTMEncoder(nn.Module):
             batch = Variable(self.get_batch(
                         sentences[stidx:stidx + bsize]), volatile=True).to(self.device)
             batch = self.forward(
-                (batch, lengths[stidx:stidx + bsize])).data.cpu().numpy()
+                (batch, lengths[stidx:stidx + bsize])).data.cpu().numpy() # TODO: refactor .data
             embeddings.append(batch)
         embeddings = np.vstack(embeddings)
 
@@ -284,7 +284,7 @@ class BLSTMEncoder(nn.Module):
         output = self.enc_lstm(batch)[0]
         output, idxs = torch.max(output, 0)
         # output, idxs = output.squeeze(), idxs.squeeze()
-        idxs = idxs.data.cpu().numpy()
+        idxs = idxs.data.cpu().numpy() # TODO: refactor .data
         argmaxs = [np.sum((idxs == k)) for k in range(len(sent[0]))]
 
         # visualize model

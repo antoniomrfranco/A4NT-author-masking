@@ -131,8 +131,8 @@ def adv_forward_pass(device, modelGen, modelEval, inps, lens, end_c=0, backprop_
             rev_gen_samples = torch.cat( [torch.unsqueeze(gs, 0) for gs in rev_gen_samples], dim=0)
             rev_gen_samples_orig_order = rev_gen_samples.index_select(1, rev_sort_idx)
             rev_gen_samples_orig_order = GradFilter(device, 2)(rev_gen_samples_orig_order) if GradFilterLayer else rev_gen_samples_orig_order
-            rev_gen_lens = rev_gen_lens.index_select(0, rev_sort_idx.data)
-            rev_char_outs = [rc.index_select(0,rev_sort_idx.data) for rc in rev_char_outs]
+            rev_gen_lens = rev_gen_lens.index_select(0, rev_sort_idx.data) # TODO: refactor .data
+            rev_char_outs = [rc.index_select(0,rev_sort_idx.data) for rc in rev_char_outs] # TODO: refactor .data
             samples_out = (gen_samples_tensor, gen_lens, char_outs, rev_gen_samples_orig_order, rev_gen_lens, rev_char_outs)
         else:
             rev_ml_out, _ = modelGen.forward_mltrain(reverse_inp, len_sorted.tolist(), inps, lens, auths=auths,
@@ -457,19 +457,19 @@ def main(params):
                     loss_constraint = alpha * constraint - (params['weight_penalty'] / 2.) * (constraint**2)
                     lossEval = loss_aid + loss_constraint
                     lossEval.backward(mone)
-                    alpha.data += (params['weight_penalty'])*alpha.grad.data
-                    alpha.grad.data.zero_()
+                    alpha.data += (params['weight_penalty'])*alpha.grad.data # TODO: refactor .data
+                    alpha.grad.data.zero_() # TODO: refactor .data
                     #optimAlpha.step()
                     #optimAlpha.zero_grad()
                 else:
                     real_aid_out.backward(mone)
                     gen_aid_out.backward(one)
 
-                avgL_const+= loss_constraint.data.cpu().numpy()[0]
-            accum_diff_eval[targ_aid] += loss_aid.data.cpu().numpy()[0]
+                avgL_const+= loss_constraint.item()
+            accum_diff_eval[targ_aid] += loss_aid.item()
             accum_count_eval[targ_aid] += 1.
             optimEval.step()
-            avgL_eval += lossEval.data.cpu().numpy()[0]
+            avgL_eval += lossEval.item()
             # Calculate discrim accuracy on generator samples.
             # This works only because it is binary target variable
             it2 += 1
@@ -598,9 +598,9 @@ def main(params):
                 targ_aid = 1 - c_aid
                 langModelInp = enc_inp.view(n_steps*b_sz, -1).mm(mapVocabToLangModel[targ_aid]).view(n_steps, b_sz, -1)
                 langProb,_ = langModel[targ_aid].forward_mltrain(langModelInp, len_sorted.tolist(), langModelInp, len_sorted.tolist(), adv_targ=True)
-                langModelTarg = pack_padded_sequence(Variable(langModelInp.data[1:,:,:].max(dim=-1)[1]), len_sorted.tolist())
+                langModelTarg = pack_padded_sequence(Variable(langModelInp.data[1:,:,:].max(dim=-1)[1]), len_sorted.tolist()) # TODO: refactor .data
                 lang_loss = params['language_loss']*ml_criterion(pack_padded_sequence(langProb,len_sorted.tolist())[0], langModelTarg[0])
-                if lang_loss.data[0] >20:
+                if lang_loss.data[0] >20: # TODO: refactor .data
                     print 'Limiting loss', lang_loss
                     lang_loss = 0.
             else:
@@ -639,7 +639,7 @@ def main(params):
                 E_gen = gen_aid_out.mean()
                 lossGen = -E_gen
 
-            accum_err_eval[targ_aid] += ((gen_aid_out.data > 0.).float().mean())# + (eval_out_gt[0][:,targ_aid].data <= 0.).float().mean())/2.
+            accum_err_eval[targ_aid] += ((gen_aid_out.data > 0.).float().mean())# + (eval_out_gt[0][:,targ_aid].data <= 0.).float().mean())/2. # TODO: refactor .data
             accum_count_gen[targ_aid] += 1.
             lossGenTot = lossGen + cyc_loss + feature_match_loss + lang_loss
             #lossGenTot = cyc_loss# +mlLoss #+ lossGen + cyc_loss + feature_match_loss
@@ -650,10 +650,10 @@ def main(params):
         torch.nn.utils.clip_grad_norm(modelGen.parameters(), params['grad_clip'])
         # Take an optimization step
         optimGen.step()
-        avgL_gen += lossGenTot.data.cpu().numpy()[0]
-        avgL_genGan += lossGen.data.cpu().numpy()[0]
-        avg_cyc_loss += cyc_loss.data.cpu().numpy()[0] if type(cyc_loss) != float else cyc_loss
-        avg_feat_loss+= feature_match_loss.data.cpu().numpy()[0] if type(feature_match_loss) != float else feature_match_loss
+        avgL_gen += lossGenTot.item()
+        avgL_genGan += lossGen.item()
+        avg_cyc_loss += cyc_loss.item() if type(cyc_loss) != float else cyc_loss
+        avg_feat_loss+= feature_match_loss.item() if type(feature_match_loss) != float else feature_match_loss
         #===========================================================================
 
         # Visualize some generator samples once in a while
@@ -683,7 +683,7 @@ def main(params):
             print('| epoch {:2.2f} | {:5d}/{:5d} batches | lr {:02.2e} | ms/it {:5.2f} | t {:2.2f} | '
                   'loss - G {:3.2f} - Gg {:3.2f} - Gc {:3.2f} - Gf {:3.2f} - E {:3.2f} - erra1 {:3.2f} - erra2 {:3.2f} - Ec {:3.2f}|'.format(
                       float(i) / iter_per_epoch, i, total_iters, params['learning_rate_gen'],
-                      elapsed * 1000 / args.log_interval, modelGen.temp.data.mean(), lossG, lossG_gan, lossGcyc, lossGfeat, lossEv_tot, 100.*err_a1, 100.*err_a2,
+                      elapsed * 1000 / args.log_interval, modelGen.temp.data.mean(), lossG, lossG_gan, lossGcyc, lossGfeat, lossEv_tot, 100.*err_a1, 100.*err_a2, # TODO: refactor .data
                       lossEv_const))
 
             avgL_gen = 0.

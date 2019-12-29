@@ -47,13 +47,13 @@ class CharCNN(nn.Module):
     def init_weights(self):
         # Weight initializations for various parts.
         a = np.sqrt(float(self.decoder_W.size(0)))
-        self.decoder_W.data.uniform_(-1.73/a, 1.73/a)
+        self.decoder_W.data.uniform_(-1.73/a, 1.73/a) # TODO: refactor .data
         #self.encoder.weight.data.uniform_(-a, a)
         self.decoder_b.data.fill_(0)
         for i in xrange(self.n_layers):
             for cnn in self.decoder_cnn[i]:
-                cnn.weight.data.uniform_(-0.01, 0.01)
-                cnn.bias.data.zero_()
+                cnn.weight.data.uniform_(-0.01, 0.01) # TODO: refactor .data
+                cnn.bias.data.zero_() # TODO: refactor .data
 
     def init_hidden(self, bsz):
         # Weight initializations for various parts.

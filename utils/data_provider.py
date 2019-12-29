@@ -88,14 +88,14 @@ class DataProvider():
     def set_hid_cache(self, idces, hid_state):
         # Limit the indexing to max items in hidden_states.
         #This allows setting multiple indices tosame vector
-        n_hid = hid_state[0].data.size()[1]
+        n_hid = hid_state[0].data.size()[1] # TODO: refactor .data
         for i,cid in enumerate(idces):
-            self.hid_cache[cid] = [torch.index_select(hd.data,1,torch.LongTensor([min(i,n_hid-1)]).to(hd.device)) for hd in hid_state]
+            self.hid_cache[cid] = [torch.index_select(hd.data,1,torch.LongTensor([min(i,n_hid-1)]).to(hd.device)) for hd in hid_state] # TODO: refactor .data
         return
 
     def get_hid_cache(self, idces, hid_state):
         for i in xrange(len(hid_state)):
-            hid_state[i].data = torch.cat([self.hid_cache[cid][i] for cid in idces],dim=1)
+            hid_state[i].data = torch.cat([self.hid_cache[cid][i] for cid in idces],dim=1) # TODO: refactor .data
         return hid_state
 
     def get_random_string(self, slen = 10, split='train', author=None):

@@ -25,7 +25,7 @@ def adv_forward_pass(modelGen, inps, lens, end_c=0, maxlen=100, auths=None,
     #--------------------------------------------------------------------------
     # The output need to be sorted by length to be fed into further LSTM stages
     #--------------------------------------------------------------------------
-    eval_inp = torch.unsqueeze(torch.cat(char_outs),1).data
+    eval_inp = torch.unsqueeze(torch.cat(char_outs),1).data # TODO: refactor .data
     #---------------------------------------------------
     # Now pass the generated samples to the evaluator
     # output has format: [auth_classifier out, hidden state, generic classifier out (optional])
@@ -39,26 +39,6 @@ def adv_forward_pass(modelGen, inps, lens, end_c=0, maxlen=100, auths=None,
         samples_out = (char_outs, )
 
     return samples_out
-
-#def adv_eval_pass(modelGen, modelEval, inps, lens, end_c=0, maxlen=100, auths=None):
-#
-#    char_outs = modelGen.forward_gen(inps, end_c=end_c, n_max=maxlen, auths=auths)
-#    #--------------------------------------------------------------------------
-#    # The output need to be sorted by length to be fed into further LSTM stages
-#    #--------------------------------------------------------------------------
-#    gen_len = len(char_outs)
-#    eval_inp = torch.unsqueeze(torch.cat(char_outs),1).data
-#    if (gen_len <= 0):
-#        import ipdb
-#        ipdb.set_trace()
-#
-#    #---------------------------------------------------
-#    # Now pass the generated samples to the evaluator
-#    # output has format: [auth_classifier out, hidden state, generic classifier out (optional])
-#    #---------------------------------------------------
-#    eval_out_gen = modelEval.forward_classify(eval_inp, lens=[gen_len], compute_softmax=True)
-#    # Undo the sorting here
-#    samples_out = (gen_len, char_outs)
 
 def main(params):
 
@@ -116,10 +96,10 @@ def main(params):
         print '--------------------------------------------'
         #print 'Translate from %s to %s'%(batch[0]['author'], ix_to_auth[auths_inp[0]])
         print colored('Inp %6s: '%(ix_to_auth[auths[0]]),'green') + colored('%s'%(jc.join([ix_to_char[c[0]] for c in inps[1:]])),auth_colors[auths[0]])
-        print colored('Out %6s: '%(ix_to_auth[auths_inp[0]]),'grey')+ colored('%s'%(jc.join([ix_to_char[c.data.cpu()[0]] for c in outs[0] if c.data.cpu()[0] in ix_to_char])),auth_colors[auths_inp[0]])
+        print colored('Out %6s: '%(ix_to_auth[auths_inp[0]]),'grey')+ colored('%s'%(jc.join([ix_to_char[c.data.cpu()[0]] for c in outs[0] if c.data.cpu()[0] in ix_to_char])),auth_colors[auths_inp[0]]) # TODO: refactor .data
 
         if params['show_rev']:
-            print colored('Rev %6s: '%(ix_to_auth[auths[0]]),'green')+ colored('%s'%(jc.join([ix_to_char[c.data.cpu()[0]] for c in outs[-1] if c.data.cpu()[0] in ix_to_char])),auth_colors[auths[0]])
+            print colored('Rev %6s: '%(ix_to_auth[auths[0]]),'green')+ colored('%s'%(jc.join([ix_to_char[c.data.cpu()[0]] for c in outs[-1] if c.data.cpu()[0] in ix_to_char])),auth_colors[auths[0]]) # TODO: refactor .data
 
 
 

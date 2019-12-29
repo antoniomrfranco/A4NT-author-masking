@@ -125,7 +125,7 @@ def main(params):
         # Take an optimization step
         optim.step()
 
-        total_loss += loss.data.cpu().numpy()[0]
+        total_loss += loss.item()
 
         # Save the hidden states in cache for later use
         if i % eval_every == 0 and i > 0:

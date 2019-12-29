@@ -36,7 +36,7 @@ def adv_forward_pass(modelGen, modelEval, inps, lens, end_c=0, maxlen=100, auths
     #--------------------------------------------------------------------------
     eval_out_gen = modelEval.forward_classify(eval_inp, lens=len_sorted.tolist(), compute_softmax=True)
     # Undo the sorting here
-    eval_out_gen= eval_out_gen[0].data.index_select(0, rev_sort_idx)
+    eval_out_gen= eval_out_gen[0].data.index_select(0, rev_sort_idx) # TODO: refactor .data
     #---------------------------------------------------
     # Now pass the generated samples to the evaluator
     # output has format: [auth_classifier out, hidden state, generic classifier out (optional])
@@ -51,28 +51,6 @@ def adv_forward_pass(modelGen, modelEval, inps, lens, end_c=0, maxlen=100, auths
         samples_out = (char_outs, gen_lens)
 
     return (eval_out_gen,) + samples_out
-
-#def adv_eval_pass(modelGen, modelEval, inps, lens, end_c=0, maxlen=100, auths=None):
-#
-#    char_outs = modelGen.forward_gen(inps, end_c=end_c, n_max=maxlen, auths=auths)
-#    #--------------------------------------------------------------------------
-#    # The output need to be sorted by length to be fed into further LSTM stages
-#    #--------------------------------------------------------------------------
-#    gen_len = len(char_outs)
-#    eval_inp = torch.unsqueeze(torch.cat(char_outs),1).data
-#    if (gen_len <= 0):
-#        import ipdb
-#        ipdb.set_trace()
-#
-#    #---------------------------------------------------
-#    # Now pass the generated samples to the evaluator
-#    # output has format: [auth_classifier out, hidden state, generic classifier out (optional])
-#    #---------------------------------------------------
-#    eval_out_gen = modelEval.forward_classify(eval_inp, lens=[gen_len], compute_softmax=True)
-#    # Undo the sorting here
-#    samples_out = (gen_len, char_outs)
-#
-#    return eval_out_gen + samples_out
 
 def main(params):
 
@@ -165,7 +143,7 @@ def main(params):
         eval_out_gt = modelEval.forward_classify(targs, lens=lens, compute_softmax=True)
         auths_inp = auths_inp.numpy()
         i_bsz = np.arange(c_bsz)
-        real_aid_out = eval_out_gt[0].data.cpu().numpy()[i_bsz, auths_inp]
+        real_aid_out = eval_out_gt[0].data.cpu().numpy()[i_bsz, auths_inp] # TODO: refactor .data
 
         gen_scores = outs[0].view(n_samp,c_bsz,-1)
         gen_aid_out = gen_scores.cpu().numpy()[:,i_bsz, auths_inp]
@@ -190,7 +168,7 @@ def main(params):
 
                 inp_text = jc.join([ix_to_char[c] for c in targs[:,b] if c in ix_to_char])
                 trans_text = jc.join([ix_to_char[c.cpu()[si,b]] for c in gen_char[:gen_lens[si,b]] if c.cpu()[si,b] in ix_to_char])
-                samples.append({'sent':inp_text,'score':eval_out_gt[0][b].data.cpu().tolist(), 'trans': trans_text, 'trans_score':gen_scores[si,b].cpu().tolist(),'sid':b_data[0][b]['sid']})
+                samples.append({'sent':inp_text,'score':eval_out_gt[0][b].data.cpu().tolist(), 'trans': trans_text, 'trans_score':gen_scores[si,b].cpu().tolist(),'sid':b_data[0][b]['sid']}) # TODO: refactor .data
             result['docs'][id_to_ix[b_data[0][b]['id']]]['sents'].append(samples)
 
         if params['print']:

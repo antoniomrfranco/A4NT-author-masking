@@ -46,7 +46,7 @@ def main(params):
     def process_batch(batch, c_idx , featstr = 'sent_enc'):
         inps, _, _,lens = dp.prepare_data(batch, char_to_ix, auth_to_ix, maxlen=cp_params['max_seq_len'])
         enc_out = modelGenEncoder.forward_encode(inps, lens)
-        enc_out = enc_out.data.cpu().numpy().astype('float16')
+        enc_out = enc_out.data.cpu().numpy().astype('float16') # TODO: refactor .data
         all_feats[c_idx:c_idx+enc_out.shape[0]] = enc_out
         for i,b in enumerate(batch):
             res['docs'][b['id']]['sents'][b['sid']][featstr] = c_idx + i 

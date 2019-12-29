@@ -22,7 +22,7 @@ class CharLstm(nn.Module):
         self.emb_size = params.get('embedding_size',-1)
         self.hidden_size = params.get('hidden_size',-1)
         self.en_residual = params.get('en_residual_conn',0)
-        self.bidir = params.get('bidir',0)
+        self.bidir = bool(params.get('bidir',0))
         self.compression_layer = params.get('compression_layer',0)
 
         # Initialize the model layers
@@ -84,41 +84,41 @@ class CharLstm(nn.Module):
         # Weight initializations for various parts.
         a = np.sqrt(float(self.decoder_W.size(0)))
         if hasattr(self,'generic_W'):
-            self.generic_W.data.uniform_(-a, a)
-            self.generic_b.data.fill_(0.)
+            self.generic_W.data.uniform_(-a, a) # TODO: refactor .data
+            self.generic_b.data.fill_(0.) # TODO: refactor .data
         if hasattr(self,'decoder_mlp'):
             n_in = np.sqrt(float(self.decoder_W_mlp.size(0)))
-            self.decoder_W_mlp.data.uniform_(-1.73/n_in, 1.73/n_in)
-            self.decoder_b_mlp.data.fill_(0.)
-        self.decoder_W.data.uniform_(-1.73/a, 1.73/a)
+            self.decoder_W_mlp.data.uniform_(-1.73/n_in, 1.73/n_in) # TODO: refactor .data
+            self.decoder_b_mlp.data.fill_(0.) # TODO: refactor .data
+        self.decoder_W.data.uniform_(-1.73/a, 1.73/a) # TODO: refactor .data
         #self.encoder.weight.data.uniform_(-a, a)
-        self.decoder_b.data.fill_(0)
+        self.decoder_b.data.fill_(0) # TODO: refactor .data
         h_sz = self.hidden_size
         if self.compression_layer:
             n_in = np.sqrt(float(self.output_size))
             #self.compression_W.data.uniform_(0,2.*(1.73/n_in))
-            qn = torch.norm(self.compression_W.weight.data, p=1, dim=1).view(-1,1).expand_as(self.compression_W.weight.data)
-            self.compression_W.weight.data = self.compression_W.weight.data.div(qn)
+            qn = torch.norm(self.compression_W.weight.data, p=1, dim=1).view(-1,1).expand_as(self.compression_W.weight.data) # TODO: refactor .data
+            self.compression_W.weight.data = self.compression_W.weight.data.div(qn) # TODO: refactor .data
 
         # LSTM forget gate could be initialized to high value (1.)
         if self.en_residual:
           for i in xrange(self.num_rec_layers):
-            self.rec_layers[i].bias_ih_l0.data.index_fill_(0, torch.arange(h_sz +1, h_sz*2).long(), 2.)
-            self.rec_layers[i].bias_hh_l0.data.index_fill_(0, torch.arange(h_sz +1, h_sz*2).long(), 2.)
+            self.rec_layers[i].bias_ih_l0.data.index_fill_(0, torch.arange(h_sz +1, h_sz*2).long(), 2.) # TODO: refactor .data
+            self.rec_layers[i].bias_hh_l0.data.index_fill_(0, torch.arange(h_sz +1, h_sz*2).long(), 2.) # TODO: refactor .data
             if self.bidir:
-                self.rec_layers[i].bias_ih_l0_reverse.data.index_fill_(0, torch.arange(h_sz +1, h_sz*2).long(), 2.)
-                self.rec_layers[i].bias_hh_l0_reverse.data.index_fill_(0, torch.arange(h_sz +1, h_sz*2).long(), 2.)
+                self.rec_layers[i].bias_ih_l0_reverse.data.index_fill_(0, torch.arange(h_sz +1, h_sz*2).long(), 2.) # TODO: refactor .data
+                self.rec_layers[i].bias_hh_l0_reverse.data.index_fill_(0, torch.arange(h_sz +1, h_sz*2).long(), 2.) # TODO: refactor .data
         else:
           for i in xrange(self.num_rec_layers):
-            getattr(self.rec_layers,'bias_ih_l'+str(i)).data.index_fill_(0, torch.arange(h_sz +1, h_sz*2).long(), 2.)
-            getattr(self.rec_layers,'bias_hh_l'+str(i)).data.index_fill_(0, torch.arange(h_sz +1, h_sz*2).long(), 2.)
+            getattr(self.rec_layers,'bias_ih_l'+str(i)).data.index_fill_(0, torch.arange(h_sz +1, h_sz*2).long(), 2.) # TODO: refactor .data
+            getattr(self.rec_layers,'bias_hh_l'+str(i)).data.index_fill_(0, torch.arange(h_sz +1, h_sz*2).long(), 2.) # TODO: refactor .data
             if self.bidir:
-                getattr(self.rec_layers,'bias_ih_l'+str(i)+'_reverse').data.index_fill_(0, torch.arange(h_sz +1, h_sz*2).long(), 2.)
-                getattr(self.rec_layers,'bias_hh_l'+str(i)+'_reverse').data.index_fill_(0, torch.arange(h_sz +1, h_sz*2).long(), 2.)
+                getattr(self.rec_layers,'bias_ih_l'+str(i)+'_reverse').data.index_fill_(0, torch.arange(h_sz +1, h_sz*2).long(), 2.) # TODO: refactor .data
+                getattr(self.rec_layers,'bias_hh_l'+str(i)+'_reverse').data.index_fill_(0, torch.arange(h_sz +1, h_sz*2).long(), 2.) # TODO: refactor .data
 
     def init_hidden(self, bsz):
         # Weight initializations for various parts.
-        weight = next(self.parameters()).data
+        weight = next(self.parameters()).data # TODO: refactor .data
         return (Variable(weight.new(self.num_rec_layers*(1+self.bidir), bsz, self.hidden_size).zero_()),
                     Variable(weight.new(self.num_rec_layers*(1+self.bidir), bsz, self.hidden_size).zero_()))
 

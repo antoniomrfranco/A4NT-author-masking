@@ -105,8 +105,8 @@ def main(params):
         else:
             batch, reset_h = dp.get_doc_batch(split='train')
             if len(reset_h) > 0:
-                hidden[0].data.index_fill_(1,torch.LongTensor(reset_h).to(device),0.)
-                hidden[1].data.index_fill_(1,torch.LongTensor(reset_h).to(device),0.)
+                hidden[0].data.index_fill_(1,torch.LongTensor(reset_h).to(device),0.) # TODO: refactor .data
+                hidden[1].data.index_fill_(1,torch.LongTensor(reset_h).to(device),0.) # TODO: refactor .data
 
         inps, targs, auths, lens = dp.prepare_data(batch, char_to_ix, auth_to_ix, leakage=leakage)
 
@@ -139,14 +139,14 @@ def main(params):
         # Take an optimization step
         optim.step()
 
-        total_loss += loss.data.cpu().numpy()[0]
-        class_loss += lossClass.data.cpu().numpy()[0]
+        total_loss += loss.item()
+        class_loss += lossClass.item()
 
         # Save the hidden states in cache for later use
         if params['randomize_batches']:
             if len(reset_next) > 0:
-                hidden[0].data.index_fill_(1,torch.LongTensor(reset_next).to(device),0.)
-                hidden[1].data.index_fill_(1,torch.LongTensor(reset_next).to(device),0.)
+                hidden[0].data.index_fill_(1,torch.LongTensor(reset_next).to(device),0.) # TODO: refactor .data
+                hidden[1].data.index_fill_(1,torch.LongTensor(reset_next).to(device),0.) # TODO: refactor .data
             dp.set_hid_cache(b_ids, hidden)
 
         if i % eval_every == 0 and i > 0:

@@ -20,7 +20,7 @@ def gumbel_softmax_sample(x, tau=0.2, hard=False):
     ysft = FN.softmax(y)
     if hard:
         max_v, max_idx = ysft.max(dim=1,keepdim=True)
-        one_hot = Variable(ysft.data.new(ysft.size()).zero_().scatter_(1, max_idx.data, ysft.data.new(max_idx.size()).fill_(1.)) - ysft.data, requires_grad=False)
+        one_hot = Variable(ysft.data.new(ysft.size()).zero_().scatter_(1, max_idx.data, ysft.data.new(max_idx.size()).fill_(1.)) - ysft.data, requires_grad=False) # TODO: refactor .data
         # Which is the right way to do this?
         #y_out = one_hot.detach() + y
         y_out = one_hot + ysft
@@ -125,15 +125,15 @@ class CharTranslator(nn.Module):
         # Weight initializations for various parts.
         if not self.encoder_only:
             a = 0.001
-            self.decoder_W.data.uniform_(-a, a)
+            self.decoder_W.data.uniform_(-a, a) # TODO: refactor .data
             #self.encoder.weight.data.uniform_(-a, a)
-            self.decoder_b.data.fill_(0)
+            self.decoder_b.data.fill_(0) # TODO: refactor .data
             if self.split_gen:
-                self.decoder_W_2.data.uniform_(-a, a)
-                self.decoder_b_2.data.fill_(0)
+                self.decoder_W_2.data.uniform_(-a, a) # TODO: refactor .data
+                self.decoder_b_2.data.fill_(0) # TODO: refactor .data
 
         if self.learn_gumbel:
-           self.gumbel_W.data.uniform_(-0.01, 0.01)
+           self.gumbel_W.data.uniform_(-0.01, 0.01) # TODO: refactor .data
 
         enc_h_sz = self.enc_hidden_size
         dec_h_sz = self.dec_hidden_size
@@ -141,37 +141,37 @@ class CharTranslator(nn.Module):
         if self.en_residual:
           if not self.no_encoder:
             for i in xrange(self.enc_num_rec_layers):
-              self.enc_rec_layers[i].bias_ih_l0.data.index_fill_(0, torch.arange(enc_h_sz +1, enc_h_sz*2).long(), 1.)
-              self.enc_rec_layers[i].bias_hh_l0.data.index_fill_(0, torch.arange(enc_h_sz +1, enc_h_sz*2).long(), 1.)
+              self.enc_rec_layers[i].bias_ih_l0.data.index_fill_(0, torch.arange(enc_h_sz +1, enc_h_sz*2).long(), 1.) # TODO: refactor .data
+              self.enc_rec_layers[i].bias_hh_l0.data.index_fill_(0, torch.arange(enc_h_sz +1, enc_h_sz*2).long(), 1.) # TODO: refactor .data
           if not self.encoder_only:
             for i in xrange(self.dec_num_rec_layers):
-              self.dec_rec_layers[i].bias_ih_l0.data.index_fill_(0, torch.arange(dec_h_sz +1, dec_h_sz*2).long(), 1.)
-              self.dec_rec_layers[i].bias_hh_l0.data.index_fill_(0, torch.arange(dec_h_sz +1, dec_h_sz*2).long(), 1.)
+              self.dec_rec_layers[i].bias_ih_l0.data.index_fill_(0, torch.arange(dec_h_sz +1, dec_h_sz*2).long(), 1.) # TODO: refactor .data
+              self.dec_rec_layers[i].bias_hh_l0.data.index_fill_(0, torch.arange(dec_h_sz +1, dec_h_sz*2).long(), 1.) # TODO: refactor .data
               if self.split_gen:
-                  self.dec_rec_layers_2[i].bias_ih_l0.data.index_fill_(0, torch.arange(dec_h_sz +1, dec_h_sz*2).long(), 1.)
-                  self.dec_rec_layers_2[i].bias_hh_l0.data.index_fill_(0, torch.arange(dec_h_sz +1, dec_h_sz*2).long(), 1.)
+                  self.dec_rec_layers_2[i].bias_ih_l0.data.index_fill_(0, torch.arange(dec_h_sz +1, dec_h_sz*2).long(), 1.) # TODO: refactor .data
+                  self.dec_rec_layers_2[i].bias_hh_l0.data.index_fill_(0, torch.arange(dec_h_sz +1, dec_h_sz*2).long(), 1.) # TODO: refactor .data
         else:
           if not self.no_encoder:
             for i in xrange(self.enc_num_rec_layers):
-              getattr(self.enc_rec_layers,'bias_ih_l'+str(i)).data.index_fill_(0, torch.arange(enc_h_sz +1, enc_h_sz*2).long(), 1.)
-              getattr(self.enc_rec_layers,'bias_hh_l'+str(i)).data.index_fill_(0, torch.arange(enc_h_sz +1, enc_h_sz*2).long(), 1.)
+              getattr(self.enc_rec_layers,'bias_ih_l'+str(i)).data.index_fill_(0, torch.arange(enc_h_sz +1, enc_h_sz*2).long(), 1.) # TODO: refactor .data
+              getattr(self.enc_rec_layers,'bias_hh_l'+str(i)).data.index_fill_(0, torch.arange(enc_h_sz +1, enc_h_sz*2).long(), 1.) # TODO: refactor .data
           if not self.encoder_only:
             for i in xrange(self.dec_num_rec_layers):
-              getattr(self.dec_rec_layers,'bias_ih_l'+str(i)).data.index_fill_(0, torch.arange(dec_h_sz +1, dec_h_sz*2).long(), 1.)
-              getattr(self.dec_rec_layers,'bias_hh_l'+str(i)).data.index_fill_(0, torch.arange(dec_h_sz +1, dec_h_sz*2).long(), 1.)
+              getattr(self.dec_rec_layers,'bias_ih_l'+str(i)).data.index_fill_(0, torch.arange(dec_h_sz +1, dec_h_sz*2).long(), 1.) # TODO: refactor .data
+              getattr(self.dec_rec_layers,'bias_hh_l'+str(i)).data.index_fill_(0, torch.arange(dec_h_sz +1, dec_h_sz*2).long(), 1.) # TODO: refactor .data
               if self.split_gen:
-                  getattr(self.dec_rec_layers_2,'bias_ih_l'+str(i)).data.index_fill_(0, torch.arange(dec_h_sz +1, dec_h_sz*2).long(), 1.)
-                  getattr(self.dec_rec_layers_2,'bias_hh_l'+str(i)).data.index_fill_(0, torch.arange(dec_h_sz +1, dec_h_sz*2).long(), 1.)
+                  getattr(self.dec_rec_layers_2,'bias_ih_l'+str(i)).data.index_fill_(0, torch.arange(dec_h_sz +1, dec_h_sz*2).long(), 1.) # TODO: refactor .data
+                  getattr(self.dec_rec_layers_2,'bias_hh_l'+str(i)).data.index_fill_(0, torch.arange(dec_h_sz +1, dec_h_sz*2).long(), 1.) # TODO: refactor .data
 
     def init_hidden(self, bsz):
         # Weight initializations for various parts.
-        weight = next(self.parameters()).data
+        weight = next(self.parameters()).data # TODO: refactor .data
         return (Variable(weight.new(self.enc_num_rec_layers, bsz, self.enc_hidden_size).zero_()),
                     Variable(weight.new(self.enc_num_rec_layers, bsz, self.enc_hidden_size).zero_()))
 
     def init_hidden_dec(self, bsz):
         # Weight initializations for various parts.
-        weight = next(self.parameters()).data
+        weight = next(self.parameters()).data # TODO: refactor .data
         return (Variable(weight.new(self.dec_num_rec_layers, bsz, self.dec_hidden_size).zero_()).detach(),
                     Variable(weight.new(self.dec_num_rec_layers, bsz, self.dec_hidden_size).zero_()).detach())
 
@@ -382,12 +382,12 @@ class CharTranslator(nn.Module):
                 self.temp = (FN.softplus(p_rnn.mm(self.gumbel_W)+self.gumbel_b) + 1.) if self.learn_gumbel else temp
                 samp = gumbel_softmax_sample(dec_out*self.softmax_scale, self.temp, hard=self.gumb_type)
                 emb = samp.mm(self.char_emb.weight)
-                _, pred_c = samp.data.max(dim=-1)
+                _, pred_c = samp.data.max(dim=-1) # TODO: refactor .data
                 char_out.append(pred_c)
-                samp.data.masked_fill_(prev_done.view(-1,1), 0.)
+                samp.data.masked_fill_(prev_done.view(-1,1), 0.) # TODO: refactor .data
                 samp_out.append(samp)
             else:
-                max_sc, pred_c = dec_out.data.max(dim=-1)
+                max_sc, pred_c = dec_out.data.max(dim=-1) # TODO: refactor .data
                 char_out.append(pred_c)
                 emb = self.char_emb(Variable(pred_c))
 
@@ -461,7 +461,7 @@ class CharTranslator(nn.Module):
                 char_out.append(pred_c)
                 emb = self.char_emb(pred_c)
 
-            if (pred_c == end_c).data[0]:
+            if (pred_c == end_c).data[0]: # TODO: refactor .data
                 break
             else:
                 # No need for any packing here

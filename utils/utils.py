@@ -13,9 +13,9 @@ from torch.nn.utils.rnn import pack_padded_sequence
 
 def repackage_hidden(h):
     """Wraps hidden states in new Variables, to detach them from their history."""
-    if type(h) == Variable:
-        return Variable(h.data)
-    elif h == None:
+    if isinstance(h, torch.Tensor):
+        return h.detach()
+    elif h is None:
         return None
     else:
         return tuple(repackage_hidden(v) for v in h)
@@ -39,7 +39,7 @@ def eval_model(dp, model, params, char_to_ix, auth_to_ix, split='val', max_docs=
         done = b_data[1]
         inps, targs, auths, lens = dp.prepare_data(b_data[0], char_to_ix, auth_to_ix)
         output, hidden = model.forward_eval(inps, hidden, compute_softmax=True)
-        z = output.data.cpu().numpy()
+        z = output.data.cpu().numpy() # TODO: refactor .data
         scores = z[np.arange(lens[0]),:,np.squeeze(targs.numpy()[:lens[0]])].sum(axis=0)
         # Accumulate the scores for each doc.
         current_doc_score = current_doc_score + scores
@@ -47,8 +47,8 @@ def eval_model(dp, model, params, char_to_ix, auth_to_ix, split='val', max_docs=
             all_window_scores[n_docs].append(scores)
 
         if done:
-            hidden[0].data.index_fill_(1,torch.LongTensor([0]).to(params['device']),0.)
-            hidden[1].data.index_fill_(1,torch.LongTensor([0]).to(params['device']),0.)
+            hidden[0].data.index_fill_(1,torch.LongTensor([0]).to(params['device']),0.) # TODO: refactor .data
+            hidden[1].data.index_fill_(1,torch.LongTensor([0]).to(params['device']),0.) # TODO: refactor .data
             correct = correct + (current_doc_score.argmax() == auths[0])
             mean_rank = mean_rank + np.where(current_doc_score.argsort()[::-1]==auths[0])[0][0]
             mean_corr_prob = mean_corr_prob + current_doc_score[auths[0]]
@@ -124,7 +124,7 @@ def eval_classify(dp, model, params, char_to_ix, auth_to_ix, split='val', max_do
         output, _ = model.forward_classify(inps, hidden_zero, compute_softmax=False,
                 predict_mode=True, lens=lens)
         output = FN.log_softmax(output.contiguous(), dim=-1)
-        z = output.data.cpu().numpy()
+        z = output.data.cpu().numpy() # TODO: refactor .data
         scores = z
         correct_textblock = correct_textblock + (scores.argmax(axis=1) == auths.numpy()).sum()
         correct_textblock_topk += (np.where(scores.argsort(axis=1)[:,::-1]==auths.numpy()[:,None])[1]<=params.get('topk',5)).sum()
@@ -230,7 +230,7 @@ def eval_translator(dp, model, params, char_to_ix, auth_to_ix, split='val', max_
         output, hidden = model.forward_mltrain(inps, lens, inps, lens, hidden_zero, compute_softmax=False, auths=auths)
         targets = pack_padded_sequence(Variable(targs).to(params['device']),lens)
         loss = criterion(pack_padded_sequence(output,lens)[0], targets[0])
-        total_loss += loss.data.cpu().numpy()[0]
+        total_loss += loss.item()
 
     cur_loss = total_loss / i
     perplexity = np.exp(cur_loss)

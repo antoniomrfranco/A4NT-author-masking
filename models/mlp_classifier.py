@@ -38,8 +38,8 @@ class MLP_classifier(nn.Module):
         a = 0.01
         # LSTM forget gate could be initialized to high value (1.)
         for i in xrange(len(self.hid_dims)):
-            self.lin_layers[i].weight.data.uniform_(-a, a)
-            self.lin_layers[i].bias.data.fill_(0)
+            self.lin_layers[i].weight.data.uniform_(-a, a) # TODO: refactor .data
+            self.lin_layers[i].bias.data.fill_(0) # TODO: refactor .data
 
     def forward(self, x, compute_softmax = False):
         x = Variable(x).to(self.device)
@@ -86,7 +86,7 @@ class MLP_classifier(nn.Module):
             # Take an optimization step
             optim.step()
 
-            total_loss += loss.data.cpu().numpy()[0]
+            total_loss += loss.item()
 
             if i % 2000 == 0 and i > 0:
                 cur_loss = total_loss / 2000.
@@ -109,6 +109,6 @@ class MLP_classifier(nn.Module):
         for i in tqdm(xrange(total_iters)):
             b_ids = np.arange(b_sz*i, min(n_samples,b_sz*(i+1)))
             output = self.forward(torch.from_numpy(features[b_ids,:]), compute_softmax = True)
-            scores[b_ids,:] = output.data.cpu().numpy()
+            scores[b_ids,:] = output.data.cpu().numpy() # TODO: refactor .data
 
         return scores

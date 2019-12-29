@@ -40,7 +40,7 @@ def main(params):
         if not all(lens):
             import ipdb; ipdb.set_trace()
         eval_out = modelEval.forward_classify(targs, lens=lens,compute_softmax=True)
-        eval_out = eval_out[0].data.cpu().numpy()
+        eval_out = eval_out[0].data.cpu().numpy() # TODO: refactor .data
         for i,b in enumerate(batch):
             inps['docs'][b['id']]['sents'][b['sid']][b['sampid']][featstr] = eval_out[i,:].tolist()
 
