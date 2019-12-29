@@ -38,45 +38,6 @@ class GradFilter(Function):
         grad_output.mul_(mask.unsqueeze(-1))
         return grad_output
 
-def calc_gradient_penalty(netD, real_data, real_lens, fake_data, fake_lens, targs, device, endc=0):
-    # print real_data.size()
-    b_sz = real_data.shape[1]
-    import ipdb
-    ipdb.set_trace()
-    alpha = np.random.rand()
-    if real_data.shape[0] > fake_data.shape[0]:
-        n_samp = real_data.shape[0]
-        fake_data = np.concatenate([fake_data, np.zeros(
-            (n_samp - fake_data.shape[0], b_sz))], dim=0)
-    elif real_data.shape[0] < fake_data.shape[0]:
-        n_samp = fake_data.shape[0]
-        real_data = np.concatenate([real_data, np.zeros(
-            (n_samp - real_data.shape[0], b_sz))], dim=0)
-
-    interp_lens = (real_lens * alpha + fake_lens *
-                   (1 - alpha)).round().astype(int)
-    real_valid_mask = (np.tile(np.arange(n_samp)[:, None], [
-                       1, b_sz]) < np.minimum(real_lens, interp_lens - 1))
-    fake_valid_mask = (np.tile(np.arange(n_samp)[:, None], [
-                       1, b_sz]) < np.minimum(fake_lens, interp_lens - 1))
-
-    beta = np.random.binomial(1, alpha, (n_samp, b_sz))
-    # This interpolation doesn't make much sense
-    interpolates = ((real_valid_mask & (beta | ~fake_valid_mask)) * real_data) + ((fake_valid_mask
-                                                                                   & ((1 - beta) | ~real_valid_mask)) * fake_data)
-    interpolates[interp_lens - 1, np.arange(b_sz)] = endc
-
-    eval_out_interp, _ = modelEval.forward_classify(
-        interpolates, lens=interp_lens.tolist())
-    gradients = autograd.grad(outputs=eval_out_interp, inputs=interpolates,
-                              grad_outputs=torch.ones(
-                                  eval_out_interp.size()).to(device),
-                              create_graph=True, retain_graph=True, only_inputs=True)[0]
-
-    gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean() * LAMBDA
-    return gradient_penalty
-
-
 def nll_loss(outputs, targets):
     return torch.gather(outputs, 1, targets.view(-1, 1))
 
@@ -410,23 +371,6 @@ def main(params):
     mone = one * -1
     print total_iters
 
-    # log using crayon/tensorboard logger
-    if params['tensorboard']:
-        cc = CrayonClient(hostname=params['tensorboard'])
-        # Create two experiments, one for generator and one for discriminator
-        our_exp_name = "generator" + params['fappend']
-        try:
-            cc.remove_experiment(our_exp_name)
-            cc.remove_experiment("discriminator" + params['fappend'])
-        except ValueError:
-            print 'No previous experiment of same name found'
-        gen_log = cc.create_experiment(our_exp_name)
-        disc_log = cc.create_experiment("discriminator" + params['fappend'])
-
-    #pr = cProfile.Profile()
-    #pr.enable()
-    #batch = dp.get_sentence_batch( params['batch_size'], split='train', atoms=params['atoms'],
-    #            aid=misc['ix_to_auth'][0])
     for i in xrange(total_iters):
         # Update the evaluator and get it into a good state.
         it2 = 0
@@ -701,9 +645,6 @@ def main(params):
             #lossGenTot = cyc_loss# +mlLoss #+ lossGen + cyc_loss + feature_match_loss
             lossGenTot.backward()
 
-        #g = make_dot(lossGenTot,{n:p for n,p in modelGen.named_parameters()})
-        #import ipdb; ipdb.set_trace()
-
         # TODO
         # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
         torch.nn.utils.clip_grad_norm(modelGen.parameters(), params['grad_clip'])
@@ -745,15 +686,6 @@ def main(params):
                       elapsed * 1000 / args.log_interval, modelGen.temp.data.mean(), lossG, lossG_gan, lossGcyc, lossGfeat, lossEv_tot, 100.*err_a1, 100.*err_a2,
                       lossEv_const))
 
-            if params['tensorboard']:
-                gen_log.add_scalar_dict(
-                    {'loss': lossG, 'loss_cyc': lossGcyc}, step=i)
-                disc_log.add_scalar_dict({'loss': lossEv_tot, 'loss_gt': lossEv_const, 'err_auth0': err_a1,
-                                          'err_auth1': err_a2}, step=i)
-                disc_log.add_scalar_dict(
-                        {'loss_diff0': lossEv_diff0, 'loss_diff1': lossEv_diff1},step=i)
-            #if (100.*accum_err_eval[0]/ accum_count_eval[0]) < 0.11:
-            #    import ipdb; ipdb.set_trace()
             avgL_gen = 0.
             avgL_genGan = 0.
             avgL_eval = 0.
