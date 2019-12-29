@@ -8,7 +8,7 @@ import numpy as np
 from model_utils import packed_mean, packed_add
 
 def sample_gumbel(x):
-    noise = torch.cuda.FloatTensor(x.size()).uniform_()
+    noise = torch.empty(x.size(), dtype=torch.float, device=x.device).uniform_()
     eps = 1e-20
     noise.add_(eps).log_().neg_()
     noise.add_(eps).log_().neg_()
@@ -30,6 +30,9 @@ def gumbel_softmax_sample(x, tau=0.2, hard=False):
 class CharTranslator(nn.Module):
     def __init__(self, params, encoder_only=False):
         super(CharTranslator, self).__init__()
+
+        self.device = params['device']
+
         #+1 is to allow padding index
         self.encoder_only = encoder_only
         self.encoder_mean_vec = params.get('encoder_mean_vec', 0)
@@ -113,7 +116,7 @@ class CharTranslator(nn.Module):
 
         self.init_weights()
         # we should move it out so that whether to do cuda or not should be upto the user.
-        self.cuda()
+        self.to(self.device)
         self.zero_hidden_bsz = params['batch_size'] # Create a dummy zero hidden state so it can be passed to lstm
         self.zero_hidden = self.init_hidden(params['batch_size']) # Create a dummy zero hidden state so it can be passed to lstm
         self.zero_hidden_dec = self.init_hidden_dec(params['batch_size']) # Create a dummy zero hidden state so it can be passed to lstm
@@ -205,9 +208,9 @@ class CharTranslator(nn.Module):
         if not self.no_encoder:
             if not adv_inp:
                 if self.training:
-                    inp = Variable(inp).cuda()
+                    inp = Variable(inp).to(self.device)
                 else:
-                    inp = Variable(inp,volatile=True).cuda()
+                    inp = Variable(inp,volatile=True).to(self.device)
 
                 emb = self.emb_drop(self.char_emb(inp))
             else:
@@ -235,10 +238,10 @@ class CharTranslator(nn.Module):
                 ctxt_sorted = ctxt
 
             if self.pad_auth_vec:
-                ctxt_sorted = torch.cat([ctxt_sorted,self.auth_emb(Variable(auths).cuda())], dim=-1)
+                ctxt_sorted = torch.cat([ctxt_sorted,self.auth_emb(Variable(auths).to(self.device))], dim=-1)
 
             if self.enc_noise:
-                ctxt_sorted = ctxt_sorted + Variable(torch.cuda.FloatTensor(ctxt_sorted.size()).normal_()/20., requires_grad=False)
+                ctxt_sorted = ctxt_sorted + Variable(torch.empty(ctxt_sorted.size(), dtype=torch.float, device=ctxt_sorted.device).normal_()/20., requires_grad=False)
             else:
                 ctxt_sorted = self.enc_drop(ctxt_sorted)
         else:
@@ -246,7 +249,7 @@ class CharTranslator(nn.Module):
 
         # Setup target variable now
         if not adv_targ:
-            targ = Variable(targ).cuda()
+            targ = Variable(targ).to(self.device)
             targ_emb = self.emb_drop(self.char_emb(targ))
             n_steps_targ = targ.size(0)
         else:
@@ -290,9 +293,9 @@ class CharTranslator(nn.Module):
         b_sz = x.size(1)
         if not adv_inp:
             if self.training:
-                x = Variable(x).cuda()
+                x = Variable(x).to(self.device)
             else:
-                x = Variable(x,volatile=True).cuda()
+                x = Variable(x,volatile=True).to(self.device)
 
             emb = self.char_emb(x)
         else:
@@ -320,9 +323,9 @@ class CharTranslator(nn.Module):
         b_sz = x.size(1)
         if not adv_inp:
             if self.training:
-                x = Variable(x).cuda()
+                x = Variable(x).to(self.device)
             else:
-                x = Variable(x,volatile=True).cuda()
+                x = Variable(x,volatile=True).to(self.device)
 
             emb = self.char_emb(x)
         else:
@@ -342,7 +345,7 @@ class CharTranslator(nn.Module):
 
         #Append with target author embedding
         if self.pad_auth_vec:
-            ctxt = torch.cat([ctxt,self.auth_emb(Variable(auths).cuda())], dim=-1)
+            ctxt = torch.cat([ctxt,self.auth_emb(Variable(auths).to(self.device))], dim=-1)
 
         if not adv_inp:
             targ_init = x[0]
@@ -369,8 +372,8 @@ class CharTranslator(nn.Module):
         p_rnn = dec_rnn_out.view(dec_bsz,-1)
         char_out = []
         samp_out = []
-        gen_lens = torch.cuda.IntTensor(dec_bsz).zero_()
-        prev_done = torch.cuda.ByteTensor(dec_bsz).zero_()
+        gen_lens = torch.empty(dec_bsz, dtype=torch.int, device=self.device).zero_()
+        prev_done = torch.empty(dec_bsz, dtype=torch.uint8, device=self.device).zero_()
 
         for i in xrange(n_max):
             # output is size seq * batch_size * vocab
@@ -409,9 +412,9 @@ class CharTranslator(nn.Module):
         n_steps = x.size(0)
         b_sz = x.size(1)
         if self.training:
-            x = Variable(x).cuda()
+            x = Variable(x).to(self.device)
         else:
-            x = Variable(x,volatile=True).cuda()
+            x = Variable(x,volatile=True).to(self.device)
 
         emb = self.emb_drop(self.char_emb(x))
         packed = emb
@@ -425,7 +428,7 @@ class CharTranslator(nn.Module):
             ctxt = enc_hidden[0][-1]
         #Append with target author embedding
         if self.pad_auth_vec:
-            ctxt = torch.cat([ctxt,self.auth_emb(Variable(auths).cuda())], dim=-1)
+            ctxt = torch.cat([ctxt,self.auth_emb(Variable(auths).to(self.device))], dim=-1)
 
         targ_init = x[0]
         targ_emb = self.char_emb(targ_init)

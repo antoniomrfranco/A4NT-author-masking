@@ -23,6 +23,7 @@ def save_checkpoint(state, fappend ='dummy', outdir = 'cv'):
     torch.save(state, filename)
 
 def main(params):
+    device = params['device']
 
     dp = DataProvider(params)
 
@@ -59,7 +60,7 @@ def main(params):
     if len(params['balance_loss']) == 0:
         criterion = nn.CrossEntropyLoss()
     else:
-        criterion = nn.CrossEntropyLoss(torch.FloatTensor(params['balance_loss']).cuda())
+        criterion = nn.CrossEntropyLoss(torch.FloatTensor(params['balance_loss']).to(device))
 
     # Restore saved checkpoint
     if params['resume'] !=None:
@@ -104,8 +105,8 @@ def main(params):
         else:
             batch, reset_h = dp.get_doc_batch(split='train')
             if len(reset_h) > 0:
-                hidden[0].data.index_fill_(1,torch.LongTensor(reset_h).cuda(),0.)
-                hidden[1].data.index_fill_(1,torch.LongTensor(reset_h).cuda(),0.)
+                hidden[0].data.index_fill_(1,torch.LongTensor(reset_h).to(device),0.)
+                hidden[1].data.index_fill_(1,torch.LongTensor(reset_h).to(device),0.)
 
         inps, targs, auths, lens = dp.prepare_data(batch, char_to_ix, auth_to_ix, leakage=leakage)
 
@@ -119,12 +120,12 @@ def main(params):
         #TODO
         if params['mode'] == 'generative':
             output, hidden = model.forward(inps, lens, hidden, auths)
-            targets = pack_padded_sequence(Variable(targs).cuda(),lens)
+            targets = pack_padded_sequence(Variable(targs).to(device),lens)
             loss = criterion(pack_padded_sequence(output,lens)[0], targets[0])
         else:
             # for classifier auths is the target
             output, _ = model.forward_classify(targs, hidden, compute_softmax=False, lens=lens)
-            targets = Variable(auths).cuda()
+            targets = Variable(auths).to(device)
             lossClass = criterion(output, targets)
             if params['compression_layer']:
                 loss = lossClass + (model.compression_W.weight.norm(p=1,dim=1)).mean()
@@ -144,8 +145,8 @@ def main(params):
         # Save the hidden states in cache for later use
         if params['randomize_batches']:
             if len(reset_next) > 0:
-                hidden[0].data.index_fill_(1,torch.LongTensor(reset_next).cuda(),0.)
-                hidden[1].data.index_fill_(1,torch.LongTensor(reset_next).cuda(),0.)
+                hidden[0].data.index_fill_(1,torch.LongTensor(reset_next).to(device),0.)
+                hidden[1].data.index_fill_(1,torch.LongTensor(reset_next).to(device),0.)
             dp.set_hid_cache(b_ids, hidden)
 
         if i % eval_every == 0 and i > 0:
@@ -255,6 +256,8 @@ if __name__ == "__main__":
   parser.add_argument('--hidden_depth', dest='hidden_depth', type=int, default=1, help='depth of hidden layer in generator RNNs')
   parser.add_argument('--embedding_size', dest='embedding_size', type=int, default=512, help='size of word encoding')
   parser.add_argument('--hidden_size', dest='hidden_size', type=int, default=512, help='size of hidden layer in generator RNNs')
+
+  parser.add_argument('--device', dest='device', type=str, default='cpu')
 
   args = parser.parse_args()
   params = vars(args) # convert to ordinary dict

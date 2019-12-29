@@ -54,7 +54,7 @@ def main(params):
         return c_idx
 
     if params['use_semantic_encoder']:
-        modelGenEncoder = BLSTMEncoder(char_to_ix, ix_to_char, params['glove_path'])
+        modelGenEncoder = BLSTMEncoder(char_to_ix, ix_to_char, params['device'], params['glove_path'])
         encoderState = torch.load(params['use_semantic_encoder'])
     else:
         modelGenEncoder = CharTranslator(cp_params, encoder_only=True)
@@ -116,7 +116,7 @@ if __name__ == "__main__":
   parser.add_argument('-b','--batch_size', dest='batch_size', type=int, default=100, help='generator/GAN checkpoint filename')
   parser.add_argument('-g','--glove_path', dest='glove_path', type=str, default='data/glove.840B.300d.txt', help='generator/GAN checkpoint filename')
   parser.add_argument('--use_semantic_encoder', dest='use_semantic_encoder', type=str, default=None, help='generator/GAN checkpoint filename')
-
+  parser.add_argument('--device', dest='device', type=str, default='cpu')
 
   args = parser.parse_args()
   params = vars(args) # convert to ordinary dict

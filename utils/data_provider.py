@@ -90,7 +90,7 @@ class DataProvider():
         #This allows setting multiple indices tosame vector
         n_hid = hid_state[0].data.size()[1]
         for i,cid in enumerate(idces):
-            self.hid_cache[cid] = [torch.index_select(hd.data,1,torch.LongTensor([min(i,n_hid-1)]).cuda()) for hd in hid_state]
+            self.hid_cache[cid] = [torch.index_select(hd.data,1,torch.LongTensor([min(i,n_hid-1)]).to(hd.device)) for hd in hid_state]
         return
 
     def get_hid_cache(self, idces, hid_state):

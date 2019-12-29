@@ -23,8 +23,9 @@ import cProfile, pstats, io
 import gc
 
 class GradFilter(Function):
-    def __init__(self, topk=1):
+    def __init__(self, device, topk=1):
         super(GradFilter, self).__init__()
+        self.device = device
         self.topk = 1
 
     def forward(self, x):
@@ -33,11 +34,11 @@ class GradFilter(Function):
     def backward(self, grad_output):
         n_time, b_sz = grad_output.size()[:2]
         _, topkidx = grad_output.abs().sum(dim=-1).topk(self.topk,dim=0)
-        mask = torch.zeros(n_time, b_sz).cuda().scatter_(0,topkidx, 1.)
+        mask = torch.zeros(n_time, b_sz).to(self.device).scatter_(0,topkidx, 1.)
         grad_output.mul_(mask.unsqueeze(-1))
         return grad_output
 
-def calc_gradient_penalty(netD, real_data, real_lens, fake_data, fake_lens, targs, endc=0):
+def calc_gradient_penalty(netD, real_data, real_lens, fake_data, fake_lens, targs, device, endc=0):
     # print real_data.size()
     b_sz = real_data.shape[1]
     import ipdb
@@ -69,7 +70,7 @@ def calc_gradient_penalty(netD, real_data, real_lens, fake_data, fake_lens, targ
         interpolates, lens=interp_lens.tolist())
     gradients = autograd.grad(outputs=eval_out_interp, inputs=interpolates,
                               grad_outputs=torch.ones(
-                                  eval_out_interp.size()).cuda(),
+                                  eval_out_interp.size()).to(device),
                               create_graph=True, retain_graph=True, only_inputs=True)[0]
 
     gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean() * LAMBDA
@@ -86,7 +87,7 @@ def save_checkpoint(state, fappend='dummy', outdir='cv', epoch=0.):
     torch.save(state, filename)
 
 
-def disp_gen_samples(modelGen, modelEval, dp, misc, maxlen=100, n_disp=5, atoms='char', append_tensor=None):
+def disp_gen_samples(device, modelGen, modelEval, dp, misc, maxlen=100, n_disp=5, atoms='char', append_tensor=None):
     modelGen.eval()
     modelEval.eval()
     ix_to_char = misc['ix_to_char']
@@ -96,7 +97,7 @@ def disp_gen_samples(modelGen, modelEval, dp, misc, maxlen=100, n_disp=5, atoms=
     inps, targs, auths, lens = dp.prepare_data(
         batch, misc['char_to_ix'], misc['auth_to_ix'], maxlen=maxlen)
 
-    outs = adv_forward_pass(modelGen, modelEval, inps, lens, end_c=misc['char_to_ix'][misc['endc']], backprop_for='None',
+    outs = adv_forward_pass(device, modelGen, modelEval, inps, lens, end_c=misc['char_to_ix'][misc['endc']], backprop_for='None',
                     maxlen=maxlen, auths=auths, cycle_compute=True,
                     append_symb=append_tensor, temp=params['gumbel_temp'], GradFilterLayer = None)
 
@@ -115,7 +116,7 @@ def disp_gen_samples(modelGen, modelEval, dp, misc, maxlen=100, n_disp=5, atoms=
     modelEval.train()
 
 
-def adv_forward_pass(modelGen, modelEval, inps, lens, end_c=0, backprop_for='all', maxlen=100, auths=None,
+def adv_forward_pass(device, modelGen, modelEval, inps, lens, end_c=0, backprop_for='all', maxlen=100, auths=None,
                      cycle_compute=False, cycle_limit_backward=False, append_symb=None, temp=0.5, GradFilterLayer=None, cycle_loss_type = 'enc'):
     if backprop_for == 'eval' or backprop_for=='None':
         modelGen.eval()
@@ -168,7 +169,7 @@ def adv_forward_pass(modelGen, modelEval, inps, lens, end_c=0, backprop_for='all
                                                                 auths=auths, adv_inp=True)
             rev_gen_samples = torch.cat( [torch.unsqueeze(gs, 0) for gs in rev_gen_samples], dim=0)
             rev_gen_samples_orig_order = rev_gen_samples.index_select(1, rev_sort_idx)
-            rev_gen_samples_orig_order = GradFilter(2)(rev_gen_samples_orig_order) if GradFilterLayer else rev_gen_samples_orig_order
+            rev_gen_samples_orig_order = GradFilter(device, 2)(rev_gen_samples_orig_order) if GradFilterLayer else rev_gen_samples_orig_order
             rev_gen_lens = rev_gen_lens.index_select(0, rev_sort_idx.data)
             rev_char_outs = [rc.index_select(0,rev_sort_idx.data) for rc in rev_char_outs]
             samples_out = (gen_samples_tensor, gen_lens, char_outs, rev_gen_samples_orig_order, rev_gen_lens, rev_char_outs)
@@ -187,6 +188,8 @@ def adv_forward_pass(modelGen, modelEval, inps, lens, end_c=0, backprop_for='all
 
 
 def main(params):
+    device = params['device']
+
     dp = DataProvider(params)
 
     # Create vocabulary and author index
@@ -260,7 +263,7 @@ def main(params):
     # If using encoder for cycle loss
     if params['cycle_loss_type'] == 'enc' or params['cycle_loss_type'] == 'noncyc_enc':
         if params['use_semantic_encoder']:
-            modelGenEncoder = BLSTMEncoder(char_to_ix, ix_to_char, params['glove_path'])
+            modelGenEncoder = BLSTMEncoder(char_to_ix, ix_to_char, params['device'], params['glove_path'])
             encoderState = torch.load(params['use_semantic_encoder'])
         else:
             modelGenEncoder = CharTranslator(params, encoder_only=True)
@@ -283,7 +286,7 @@ def main(params):
             if lang_model_cp['char_to_ix'] != char_to_ix:
                 orig_chartoix = lang_model_cp['char_to_ix']
                 ix_to_oix = {ix:orig_chartoix[c] if c in orig_chartoix else orig_chartoix['UNK'] for c, ix in char_to_ix.items()}
-                mapVocabToLangModel[lmix] = Variable(torch.cuda.FloatTensor(len(ix_to_oix)+1, len(orig_chartoix)+1).zero_(),requires_grad=False)
+                mapVocabToLangModel[lmix] = Variable(torch.empty(len(ix_to_oix)+1, len(orig_chartoix)+1, dtype=torch.float, device=device).zero_(),requires_grad=False)
                 for i in ix_to_oix:
                     mapVocabToLangModel[lmix].data[i,ix_to_oix[i]] = 1.
 
@@ -311,7 +314,7 @@ def main(params):
                                     lr=params['learning_rate_eval'], alpha=params['decay_rate'],
                                     eps=params['smooth_eps'])
     # For fisher gan setup the lagrange multiplier alpha
-    alpha = torch.FloatTensor([0]).cuda()
+    alpha = torch.FloatTensor([0]).to(device)
     alpha = Variable(alpha, requires_grad=True)
 
     optimAlpha= torch.optim.Adam([alpha], lr=-params['weight_penalty'])
@@ -326,7 +329,7 @@ def main(params):
     ml_criterion = nn.CrossEntropyLoss()
     accuracy_lay = nn.L1Loss()
 
-    GradFilterLayer = GradFilter(params['gradient_filter']) if params['gradient_filter'] else None
+    GradFilterLayer = GradFilter(device, params['gradient_filter']) if params['gradient_filter'] else None
 
     # Restore saved checkpoint
     if restore_gen:
@@ -391,19 +394,19 @@ def main(params):
     append_tensor = np.zeros((1, params['batch_size'], params['vocabulary_size'] + 1), dtype=np.float32)
     append_tensor[:, :, misc['char_to_ix'][misc['startc']]] = 1
     append_tensor = Variable(torch.FloatTensor(
-        append_tensor), requires_grad=False).cuda()
+        append_tensor), requires_grad=False).to(device)
     # Another for the displaying cycle reconstruction
     append_tensor_disp = np.zeros((1, 5, params['vocabulary_size'] + 1), dtype=np.float32)
     append_tensor_disp[:, :, misc['char_to_ix'][misc['startc']]] = 1
     append_tensor_disp = Variable(torch.FloatTensor(
-        append_tensor_disp), requires_grad=False).cuda()
+        append_tensor_disp), requires_grad=False).to(device)
 
 
-    disp_gen_samples(modelGen, modelEval, dp, misc,
+    disp_gen_samples(device, modelGen, modelEval, dp, misc,
                      maxlen=params['max_seq_len'], atoms=params['atoms'], append_tensor=append_tensor_disp)
-    ones = Variable(torch.ones(params['batch_size'])).cuda()
-    zeros = Variable(torch.zeros(params['batch_size'])).cuda()
-    one = torch.FloatTensor([1]).cuda()
+    ones = Variable(torch.ones(params['batch_size'])).to(device)
+    zeros = Variable(torch.zeros(params['batch_size'])).to(device)
+    one = torch.FloatTensor([1]).to(device)
     mone = one * -1
     print total_iters
 
@@ -445,11 +448,11 @@ def main(params):
             inps, targs, auths, lens = dp.prepare_data(batch_inpauth, misc['char_to_ix'],
                                                   misc['auth_to_ix'], maxlen=params['max_seq_len'])
             # outs are organized as
-            outs = adv_forward_pass(modelGen, modelEval, inps, lens,
+            outs = adv_forward_pass(device, modelGen, modelEval, inps, lens,
                                     end_c=misc['char_to_ix'][misc['endc']], backprop_for='eval',
                                     maxlen=params['max_seq_len'], auths=auths, temp=params['gumbel_temp'])
 
-            targets = Variable(auths).cuda()
+            targets = Variable(auths).to(device)
             #---------------------------------------------------------------------
 
             #---------------------------------------------------------------------
@@ -521,33 +524,11 @@ def main(params):
                 avgL_const+= loss_constraint.data.cpu().numpy()[0]
             accum_diff_eval[targ_aid] += loss_aid.data.cpu().numpy()[0]
             accum_count_eval[targ_aid] += 1.
-                #lossEval = loss_aid  # + lossEvalGt
-
-                # This is used in improved wasserstien gan
-                # if not params['fisher_gan']:
-                #    _, fake_data = outs[-2].max(dim=-1)
-                #    grad_penalty = calc_gradient_penalty(modelEval, targs.numpy(), np.array(lens), fake_data.data.cpu().numpy(),
-                #            outs[-1].cpu().numpy())
-                # else:
-                #    variance_penalty
-
-            # if params['generic_classifier']:
-            #    lossGeneric = (eval_generic(outs[3], ones) + eval_generic(outs[2], zeros))
-            #    #if i> 750:
-            #    #    import ipdb; ipdb.set_trace()
-            #    predGen_fake= outs[2]>0.5
-            #    avg_acc_geneval += accuracy_lay(predGen_fake.float(),zeros).data[0]
-            #    lossEval += lossGeneric
-            #    avgL_generic += lossGeneric.data.cpu().numpy()[0]
             optimEval.step()
-            #avgL_gt += lossEvalGt.data.cpu().numpy()[0]
             avgL_eval += lossEval.data.cpu().numpy()[0]
             # Calculate discrim accuracy on generator samples.
             # This works only because it is binary target variable
             it2 += 1
-            # print '%.2f'%lossEval.data[0],
-        #if i > 200:
-        #    import ipdb; ipdb.set_trace()
 
         #===========================================================================
         for p in modelEval.parameters():
@@ -586,7 +567,7 @@ def main(params):
 
             if params['ml_update']:
                 ml_output, _ = modelGen.forward_mltrain(gttargInps, gtlens, gttargInps, gtlens, auths=gttargauths)
-                mlTarg = pack_padded_sequence(Variable(gttargtargs).cuda(), gtlens)
+                mlTarg = pack_padded_sequence(Variable(gttargtargs).to(device), gtlens)
                 mlLoss = params['ml_update']*ml_criterion(pack_padded_sequence(ml_output,gtlens)[0], mlTarg[0])
                 mlLoss.backward()#retain_variables=True)
 
@@ -598,7 +579,7 @@ def main(params):
 
         for gi in xrange(iters_gen):
             #import ipdb; ipdb.set_trace()
-            outs = adv_forward_pass(modelGen, modelEval, inps, lens, end_c=misc['char_to_ix'][misc['endc']],
+            outs = adv_forward_pass(device, modelGen, modelEval, inps, lens, end_c=misc['char_to_ix'][misc['endc']],
                         maxlen=params['max_seq_len'], auths=auths, cycle_compute=(params['cycle_loss_type'] != None and params['cycle_loss_type'] != 'noncyc_enc'),
                         cycle_limit_backward=params['cycle_loss_limitback'], append_symb=append_tensor, temp=params['gumbel_temp'],
                         GradFilterLayer = GradFilterLayer, cycle_loss_type = params['cycle_loss_type'])
@@ -613,13 +594,12 @@ def main(params):
                 feature_match_loss = 0.
 
             #---------------------------------------------------------------------
-            targets = Variable(auths).cuda()
+            targets = Variable(auths).to(device)
             if params['cycle_loss_type'] == 'bow':
                 # Does this make any sense!!?
-                cyc_targ = Variable(torch.cuda.FloatTensor(params['batch_size'],
-                                                           params['vocabulary_size'] + 1).zero_().scatter_add_(1, targs.transpose(0, 1).cuda(),
-                                                                                                               torch.ones(targs.size()[::-1]).cuda()).index_fill_(1, torch.cuda.LongTensor([0]), 0), requires_grad=False)
-                # cyc_targ.index_fill_(1,torch.cuda.LongTensor([0]),0)
+                cyc_targ = Variable(torch.empty(params['batch_size'],
+                                                           params['vocabulary_size'] + 1, dtype=torch.float, device=device).zero_().scatter_add_(1, targs.transpose(0, 1).to(device),
+                                                                                                               torch.ones(targs.size()[::-1]).to(device)).index_fill_(1, torch.tensor([0], dtype=torch.long, device=device), 0), requires_grad=False)
                 cyc_loss = params['cycle_loss_w'] * cycle_loss_func(outs[-3].sum(dim=0), cyc_targ)
                 rev_char_outs = outs[-1]; rev_gen_lens = outs[-2]
                 char_outs = outs[4]; gen_lens = outs[3]
@@ -660,7 +640,7 @@ def main(params):
                 cyc_loss = params['cycle_loss_w'] * cycle_loss_func(rev_enc_orig_order, enc_inp_gt.detach())
             elif params['cycle_loss_type'] == 'ml':
                 rev_ml = outs[-1]
-                rev_mlTarg = pack_padded_sequence(Variable(targs).cuda(), lens)
+                rev_mlTarg = pack_padded_sequence(Variable(targs).to(device), lens)
                 cyc_loss = params['cycle_loss_w']*ml_criterion(pack_padded_sequence(rev_ml,lens)[0], rev_mlTarg[0])
             else:
                 cyc_loss = 0.
@@ -737,7 +717,7 @@ def main(params):
 
         # Visualize some generator samples once in a while
         if i % 500 == 499:
-            disp_gen_samples( modelGen, modelEval, dp, misc,
+            disp_gen_samples(device, modelGen, modelEval, dp, misc,
                     maxlen=params['max_seq_len'], atoms=params['atoms'],
                     append_tensor=append_tensor_disp)
         skip_first = 50 if i%500==499 else 1
@@ -968,6 +948,8 @@ if __name__ == "__main__":
     parser.add_argument('--learn_gumbel',
                         dest='learn_gumbel', type=bool, default=False)
 
+    parser.add_argument('--device',
+                        dest='device', type=str, default='cpu')
 
     args = parser.parse_args()
     params = vars(args)  # convert to ordinary dict

@@ -47,8 +47,8 @@ def eval_model(dp, model, params, char_to_ix, auth_to_ix, split='val', max_docs=
             all_window_scores[n_docs].append(scores)
 
         if done:
-            hidden[0].data.index_fill_(1,torch.LongTensor([0]).cuda(),0.)
-            hidden[1].data.index_fill_(1,torch.LongTensor([0]).cuda(),0.)
+            hidden[0].data.index_fill_(1,torch.LongTensor([0]).to(params['device']),0.)
+            hidden[1].data.index_fill_(1,torch.LongTensor([0]).to(params['device']),0.)
             correct = correct + (current_doc_score.argmax() == auths[0])
             mean_rank = mean_rank + np.where(current_doc_score.argsort()[::-1]==auths[0])[0][0]
             mean_corr_prob = mean_corr_prob + current_doc_score[auths[0]]
@@ -228,7 +228,7 @@ def eval_translator(dp, model, params, char_to_ix, auth_to_ix, split='val', max_
             c_sz = len(b_data[0])
         inps, targs, auths, lens = dp.prepare_data(b_data[0], char_to_ix, auth_to_ix, maxlen=params['max_seq_len'])
         output, hidden = model.forward_mltrain(inps, lens, inps, lens, hidden_zero, compute_softmax=False, auths=auths)
-        targets = pack_padded_sequence(Variable(targs).cuda(),lens)
+        targets = pack_padded_sequence(Variable(targs).to(params['device']),lens)
         loss = criterion(pack_padded_sequence(output,lens)[0], targets[0])
         total_loss += loss.data.cpu().numpy()[0]
 

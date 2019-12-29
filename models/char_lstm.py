@@ -9,29 +9,12 @@ import numpy as np
 from torch.autograd import Variable, Function
 
 
-class GradEmbMod(Function):
-    def __init__(self):
-        super(GradEmbMod, self).__init__()
-
-    def forward(self, x, weight):
-        b_sz = x.size(1)
-        n_steps = x.size(0)
-        emb_mul = (x.view(n_steps*b_sz,-1).mm(weight).view(n_steps,b_sz, -1))
-        self.save_for_backward(x,weight, emb_mul)
-        return emb_mul
-
-    def backward(self, grad_output):
-        import ipdb;ipdb.set_trace()
-        n_time, b_sz = grad_output.size()[:2]
-        _, topkidx = grad_output.abs().sum(dim=-1).topk(self.topk,dim=0)
-        mask = torch.zeros(n_time, b_sz).cuda().scatter_(0,topkidx, 1.)
-        grad_output.mul_(mask.unsqueeze(-1))
-        return grad_output
-
-
 class CharLstm(nn.Module):
     def __init__(self, params):
         super(CharLstm, self).__init__()
+
+        self.device = params['device']
+
         #+1 is to allow padding index
         self.output_size = params.get('vocabulary_size',-1) + 1
         self.num_output_layers = params.get('num_output_layers',1)
@@ -95,7 +78,7 @@ class CharLstm(nn.Module):
 
         self.init_weights()
         # we should move it out so that whether to do cuda or not should be upto the user.
-        self.cuda()
+        self.to(self.device)
 
     def init_weights(self):
         # Weight initializations for various parts.
@@ -167,7 +150,7 @@ class CharLstm(nn.Module):
         # x should be a numpy array of n_seq x n_batch dimensions
         b_sz = x.size(1)
         n_steps = x.size(0)
-        x = Variable(x).cuda()
+        x = Variable(x).to(self.device)
         emb = self.enc_drop(self.encoder(x))
         packed = pack_padded_sequence(emb, lengths)
 
@@ -177,9 +160,9 @@ class CharLstm(nn.Module):
         rnn_out = self.dec_drop(rnn_out_unp[0])
 
         # implement the multi-headed RNN.
-        W = self.decoder_W[target_head.cuda()]
+        W = self.decoder_W[target_head.to(self.device)]
         # reshape and expand b to size (batch*n_steps*vocab_size)
-        b = self.decoder_b[target_head.cuda()].view(b_sz, -1, self.output_size)
+        b = self.decoder_b[target_head.to(self.device)].view(b_sz, -1, self.output_size)
         b = b.expand(b_sz, x.size(0), self.output_size)
         # output is size seq * batch_size * vocab
         dec_out = torch.baddbmm(b, rnn_out.transpose(0,1), W).transpose(0,1)
@@ -196,7 +179,7 @@ class CharLstm(nn.Module):
         # In this case batch will be a single sequence.
         n_auth = self.num_output_layers
         n_steps = x.size(0)
-        x = Variable(x,volatile=True).cuda()
+        x = Variable(x,volatile=True).to(self.device)
         # No Dropout needed
         emb = self.encoder(x)
         # No need for any packing here
@@ -229,7 +212,7 @@ class CharLstm(nn.Module):
 
         n_auth = self.num_output_layers
         n_steps = x.size(0)
-        x = Variable(x,volatile=True).cuda()
+        x = Variable(x,volatile=True).to(self.device)
         emb = self.encoder(x)
         # No need for any packing here
         packed = emb
@@ -237,9 +220,9 @@ class CharLstm(nn.Module):
         # Feed in the seed string. We are not intersted in these outputs except for the last one.
         rnn_out, hidden = self._my_recurrent_layer(packed, h_prev)
 
-        W = self.decoder_W[target_auth.cuda()][0]
+        W = self.decoder_W[target_auth.to(self.device)][0]
         # reshape and expand b to size (batch*n_steps*vocab_size)
-        b = self.decoder_b[target_auth.cuda()].view(1, self.output_size)
+        b = self.decoder_b[target_auth.to(self.device)].view(1, self.output_size)
 
         p_rnn = rnn_out[-1]
         char_out = []
@@ -268,9 +251,9 @@ class CharLstm(nn.Module):
         b_sz = x.size(1)
         if not adv_inp:
             if predict_mode:
-                x = Variable(x,volatile=True).cuda()
+                x = Variable(x,volatile=True).to(self.device)
             else:
-                x = Variable(x).cuda()
+                x = Variable(x).to(self.device)
 
             if self.compression_layer:
                 compressed_x = self.compression_W(x).view(n_steps*b_sz, -1)
@@ -287,7 +270,6 @@ class CharLstm(nn.Module):
                 emb_mul = compressed_x.div(qn).mm(self.encoder.weight).view(n_steps,b_sz, -1)
             else:
                 emb_mul = x.view(n_steps*b_sz,-1).mm(self.encoder.weight).view(n_steps,b_sz, -1)
-            #emb_mul = GradEmbMod()(x,self.encoder.weight)
             emb = self.enc_drop(emb_mul) if drop else emb_mul
 
         # Pack the sentences as they can be of different lens

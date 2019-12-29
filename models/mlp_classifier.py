@@ -9,6 +9,9 @@ import numpy as np
 class MLP_classifier(nn.Module):
     def __init__(self, params):
         super(MLP_classifier, self).__init__()
+
+        self.device = params['device']
+
         #+1 is to allow padding index
         self.output_size = params.get('num_output_layers',205)
         self.hid_dims = params.get('hidden_widths',[])
@@ -28,7 +31,7 @@ class MLP_classifier(nn.Module):
         self.softmax = nn.Softmax()
         self.init_weights()
         # we should move it out so that whether to do cuda or not should be upto the user.
-        self.cuda()
+        self.to(self.device)
 
     def init_weights(self):
         # Weight initializations for various parts.
@@ -39,7 +42,7 @@ class MLP_classifier(nn.Module):
             self.lin_layers[i].bias.data.fill_(0)
 
     def forward(self, x, compute_softmax = False):
-        x = Variable(x).cuda()
+        x = Variable(x).to(self.device)
         prev_out = x
 
         for i in xrange(len(self.hid_dims)-1):
@@ -74,7 +77,7 @@ class MLP_classifier(nn.Module):
         for i in tqdm(xrange(total_iters)):
             optim.zero_grad()
             b_ids = np.random.choice(idxes, size=b_sz)
-            targets = Variable(torch.from_numpy(targs[b_ids])).cuda()
+            targets = Variable(torch.from_numpy(targs[b_ids])).to(self.device)
 
             output = self.forward(torch.from_numpy(features[b_ids,:]))
             loss = criterion(output, targets)

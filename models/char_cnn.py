@@ -8,6 +8,9 @@ import numpy as np
 class CharCNN(nn.Module):
     def __init__(self, params):
         super(CharCNN, self).__init__()
+
+        self.device = params['device']
+
         #+1 is to allow padding index
         self.n_words = params.get('vocabulary_size',-1) + 1
         self.num_outputs = params.get('num_output_layers',1)
@@ -39,7 +42,7 @@ class CharCNN(nn.Module):
 
         self.init_weights()
         # we should move it out so that whether to do cuda or not should be upto the user.
-        self.cuda()
+        self.to(self.device)
 
     def init_weights(self):
         # Weight initializations for various parts.
@@ -64,9 +67,9 @@ class CharCNN(nn.Module):
         b_sz = x.size(1)
         if not adv_inp:
             if predict_mode:
-                x = Variable(x,volatile=True).cuda()
+                x = Variable(x,volatile=True).to(self.device)
             else:
-                x = Variable(x).cuda()
+                x = Variable(x).to(self.device)
 
             emb = self.enc_drop(self.encoder(x))
         else:

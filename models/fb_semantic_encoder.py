@@ -21,8 +21,11 @@ InferSent encoder
 
 class BLSTMEncoder(nn.Module):
 
-    def __init__(self, word_to_ix, ix_to_word, glove_path = 'default'):
+    def __init__(self, word_to_ix, ix_to_word, device, glove_path = 'default'):
         super(BLSTMEncoder, self).__init__()
+
+        self.device = device
+
         # hardcode here for configuration used by pretrained facebook model
         self.bsize = 128 #config['bsize']
         self.word_emb_dim = 300 #config['word_emb_dim']
@@ -54,11 +57,7 @@ class BLSTMEncoder(nn.Module):
         del word_vecs
         del word_to_ix_local
 
-        self.cuda()
-
-    def is_cuda(self):
-        # either all weights are on cpu or they are on gpu
-        return 'cuda' in str(type(self.enc_lstm.bias_hh_l0.data))
+        self.to(self.device)
 
     def forward(self, sent_tuple):
         # sent_len: [max_len, ..., min_len] (bsize)
@@ -69,8 +68,7 @@ class BLSTMEncoder(nn.Module):
         sent_len, idx_sort = np.sort(sent_len)[::-1], np.argsort(-sent_len)
         idx_unsort = np.argsort(idx_sort)
 
-        idx_sort = torch.from_numpy(idx_sort).cuda() if self.is_cuda() \
-            else torch.from_numpy(idx_sort)
+        idx_sort = torch.from_numpy(idx_sort).to(self.device)
         sent = sent.index_select(1, Variable(idx_sort))
 
         # Handling padding in Recurrent Networks
@@ -79,13 +77,12 @@ class BLSTMEncoder(nn.Module):
         sent_output = nn.utils.rnn.pad_packed_sequence(sent_output)[0]
 
         # Un-sort by length
-        idx_unsort = torch.from_numpy(idx_unsort).cuda() if self.is_cuda() \
-            else torch.from_numpy(idx_unsort)
+        idx_unsort = torch.from_numpy(idx_unsort).to(self.device)
         sent_output = sent_output.index_select(1, Variable(idx_unsort))
 
         # Pooling
         if self.pool_type == "mean":
-            sent_len = Variable(torch.FloatTensor(sent_len)).unsqueeze(1).cuda()
+            sent_len = Variable(torch.FloatTensor(sent_len)).unsqueeze(1).to(self.device)
             emb = torch.sum(sent_output, 0).squeeze(0)
             emb = emb / sent_len.expand_as(emb)
         elif self.pool_type == "max":
@@ -227,9 +224,9 @@ class BLSTMEncoder(nn.Module):
         b_sz = x.size(1)
         if not adv_inp:
             if self.training:
-                x = Variable(x).cuda()
+                x = Variable(x).to(self.device)
             else:
-                x = Variable(x,volatile=True).cuda()
+                x = Variable(x,volatile=True).to(self.device)
             emb = self.emb_layer(x)
         else:
             emb = x.view(n_steps*b_sz,-1).mm(self.emb_layer.weight).view(n_steps, b_sz, -1)
@@ -254,9 +251,7 @@ class BLSTMEncoder(nn.Module):
         embeddings = []
         for stidx in range(0, len(sentences), bsize):
             batch = Variable(self.get_batch(
-                        sentences[stidx:stidx + bsize]), volatile=True)
-            if self.is_cuda():
-                batch = batch.cuda()
+                        sentences[stidx:stidx + bsize]), volatile=True).to(self.device)
             batch = self.forward(
                 (batch, lengths[stidx:stidx + bsize])).data.cpu().numpy()
             embeddings.append(batch)
@@ -269,7 +264,7 @@ class BLSTMEncoder(nn.Module):
         if verbose:
             print('Speed : {0} sentences/s ({1} mode, bsize={2})'.format(
                     round(len(embeddings)/(time.time()-tic), 2),
-                    'gpu' if self.is_cuda() else 'cpu', bsize))
+                    str(self.device), bsize))
         return embeddings
 
     def visualize(self, sent, tokenize=True):
@@ -284,10 +279,8 @@ class BLSTMEncoder(nn.Module):
             import warnings
             warnings.warn('No words in "{0}" have glove vectors. Replacing \
                            by "<s> </s>"..'.format(sent))
-        batch = Variable(self.get_batch(sent), volatile=True)
+        batch = Variable(self.get_batch(sent), volatile=True).to(self.device)
 
-        if self.is_cuda():
-            batch = batch.cuda()
         output = self.enc_lstm(batch)[0]
         output, idxs = torch.max(output, 0)
         # output, idxs = output.squeeze(), idxs.squeeze()

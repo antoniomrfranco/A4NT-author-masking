@@ -24,6 +24,7 @@ def save_checkpoint(state, fappend ='dummy', outdir = 'cv'):
     torch.save(state, filename)
 
 def main(params):
+    device = params['device']
 
     dp = DataProvider(params)
 
@@ -109,12 +110,12 @@ def main(params):
         #TODO
         if params['mode'] == 'generative':
             output, _ = model.forward_mltrain(inps, lens, inps, lens, hidden_zeros, auths=auths)
-            targets = pack_padded_sequence(Variable(targs).cuda(),lens)
+            targets = pack_padded_sequence(Variable(targs).to(device),lens)
             loss = criterion(pack_padded_sequence(output,lens)[0], targets[0])
         else:
             # for classifier auths is the target
             output, hidden = model.forward_classify(inps, hidden, compute_softmax=True)
-            targets = Variable(auths).cuda()
+            targets = Variable(auths).to(device)
             loss = criterion(output, targets)
         loss.backward()
 
@@ -227,6 +228,8 @@ if __name__ == "__main__":
   parser.add_argument('--enc_hidden_size', dest='enc_hidden_size', type=int, default=512, help='size of hidden layer in generator RNNs')
   parser.add_argument('--dec_hidden_depth', dest='dec_hidden_depth', type=int, default=1, help='depth of hidden layer in generator RNNs')
   parser.add_argument('--dec_hidden_size', dest='dec_hidden_size', type=int, default=512, help='size of hidden layer in generator RNNs')
+
+  parser.add_argument('--device', dest='device', type=str, default='cpu')
 
   args = parser.parse_args()
   params = vars(args) # convert to ordinary dict

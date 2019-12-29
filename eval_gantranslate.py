@@ -123,7 +123,7 @@ def main(params):
 
     append_tensor = np.zeros((1, 1), dtype=np.int)
     append_tensor[0, 0] = char_to_ix[startc]
-    append_tensor = torch.LongTensor(append_tensor).cuda()
+    append_tensor = torch.LongTensor(append_tensor).to(params['device'])
 
     accum_diff_eval = [[],[]]
     accum_err_eval = np.zeros(len(auth_to_ix))
