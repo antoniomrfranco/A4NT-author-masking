@@ -223,10 +223,8 @@ class BLSTMEncoder(nn.Module):
         n_steps = x.size(0)
         b_sz = x.size(1)
         if not adv_inp:
-            if self.training:
-                x = Variable(x).to(self.device)
-            else:
-                x = Variable(x,volatile=True).to(self.device)
+            torch.set_grad_enabled(self.training)
+            x = Variable(x).to(self.device)
             emb = self.emb_layer(x)
         else:
             emb = x.view(n_steps*b_sz,-1).mm(self.emb_layer.weight).view(n_steps, b_sz, -1)
@@ -248,23 +246,24 @@ class BLSTMEncoder(nn.Module):
         sentences, lengths, idx_sort = self.prepare_samples(
                         sentences, bsize, tokenize, verbose)
 
-        embeddings = []
-        for stidx in range(0, len(sentences), bsize):
-            batch = Variable(self.get_batch(
-                        sentences[stidx:stidx + bsize]), volatile=True).to(self.device)
-            batch = self.forward(
-                (batch, lengths[stidx:stidx + bsize])).data.cpu().numpy() # TODO: refactor .data
-            embeddings.append(batch)
-        embeddings = np.vstack(embeddings)
+        with torch.no_grad():
+            embeddings = []
+            for stidx in range(0, len(sentences), bsize):
+                batch = Variable(self.get_batch(
+                            sentences[stidx:stidx + bsize])).to(self.device)
+                batch = self.forward(
+                    (batch, lengths[stidx:stidx + bsize])).data.cpu().numpy() # TODO: refactor .data
+                embeddings.append(batch)
+            embeddings = np.vstack(embeddings)
 
-        # unsort
-        idx_unsort = np.argsort(idx_sort)
-        embeddings = embeddings[idx_unsort]
+            # unsort
+            idx_unsort = np.argsort(idx_sort)
+            embeddings = embeddings[idx_unsort]
 
-        if verbose:
-            print('Speed : {0} sentences/s ({1} mode, bsize={2})'.format(
-                    round(len(embeddings)/(time.time()-tic), 2),
-                    str(self.device), bsize))
+            if verbose:
+                print('Speed : {0} sentences/s ({1} mode, bsize={2})'.format(
+                        round(len(embeddings)/(time.time()-tic), 2),
+                        str(self.device), bsize))
         return embeddings
 
     def visualize(self, sent, tokenize=True):
@@ -279,23 +278,25 @@ class BLSTMEncoder(nn.Module):
             import warnings
             warnings.warn('No words in "{0}" have glove vectors. Replacing \
                            by "<s> </s>"..'.format(sent))
-        batch = Variable(self.get_batch(sent), volatile=True).to(self.device)
+        
+        with torch.no_grad():
+            batch = Variable(self.get_batch(sent)).to(self.device)
 
-        output = self.enc_lstm(batch)[0]
-        output, idxs = torch.max(output, 0)
-        # output, idxs = output.squeeze(), idxs.squeeze()
-        idxs = idxs.data.cpu().numpy() # TODO: refactor .data
-        argmaxs = [np.sum((idxs == k)) for k in range(len(sent[0]))]
+            output = self.enc_lstm(batch)[0]
+            output, idxs = torch.max(output, 0)
+            # output, idxs = output.squeeze(), idxs.squeeze()
+            idxs = idxs.data.cpu().numpy() # TODO: refactor .data
+            argmaxs = [np.sum((idxs == k)) for k in range(len(sent[0]))]
 
-        # visualize model
-        import matplotlib.pyplot as plt
-        x = range(len(sent[0]))
-        y = [100.0*n/np.sum(argmaxs) for n in argmaxs]
-        plt.xticks(x, sent[0], rotation=45)
-        plt.bar(x, y)
-        plt.ylabel('%')
-        plt.title('Visualisation of words importance')
-        plt.show()
+            # visualize model
+            import matplotlib.pyplot as plt
+            x = range(len(sent[0]))
+            y = [100.0*n/np.sum(argmaxs) for n in argmaxs]
+            plt.xticks(x, sent[0], rotation=45)
+            plt.bar(x, y)
+            plt.ylabel('%')
+            plt.title('Visualisation of words importance')
+            plt.show()
 
         return output, idxs
 

@@ -59,17 +59,14 @@ class CharCNN(nn.Module):
         # Weight initializations for various parts.
         return None
 
-    def forward_classify(self, x, h_prev=None, compute_softmax = False, predict_mode=False, adv_inp=False, lens=None):
+    def forward_classify(self, x, h_prev=None, compute_softmax = False, adv_inp=False, lens=None):
         # x should be a numpy array of n_seq x n_batch dimensions
         # In this case batch will be a single sequence.
         n_auth = self.num_outputs
         n_steps = x.size(0)
         b_sz = x.size(1)
         if not adv_inp:
-            if predict_mode:
-                x = Variable(x,volatile=True).to(self.device)
-            else:
-                x = Variable(x).to(self.device)
+            x = Variable(x).to(self.device)
 
             emb = self.enc_drop(self.encoder(x))
         else:

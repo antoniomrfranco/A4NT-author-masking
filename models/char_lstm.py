@@ -175,32 +175,33 @@ class CharLstm(nn.Module):
         return prob_out, hidden
 
     def forward_eval(self, x, h_prev, compute_softmax = True):
-        # x should be a numpy array of n_seq x n_batch dimensions
-        # In this case batch will be a single sequence.
-        n_auth = self.num_output_layers
-        n_steps = x.size(0)
-        x = Variable(x,volatile=True).to(self.device)
-        # No Dropout needed
-        emb = self.encoder(x)
-        # No need for any packing here
-        packed = emb
+        with torch.no_grad():
+            # x should be a numpy array of n_seq x n_batch dimensions
+            # In this case batch will be a single sequence.
+            n_auth = self.num_output_layers
+            n_steps = x.size(0)
+            x = Variable(x).to(self.device)
+            # No Dropout needed
+            emb = self.encoder(x)
+            # No need for any packing here
+            packed = emb
 
-        rnn_out, hidden = self._my_recurrent_layer(packed, h_prev)
+            rnn_out, hidden = self._my_recurrent_layer(packed, h_prev)
 
-        # implement the multi-headed RNN.
-        rnn_out = rnn_out.expand(n_steps, n_auth, self.hidden_size)
-        W = self.decoder_W
+            # implement the multi-headed RNN.
+            rnn_out = rnn_out.expand(n_steps, n_auth, self.hidden_size)
+            W = self.decoder_W
 
-        # reshape and expand b to size (n_auth*n_steps*vocab_size)
-        b = self.decoder_b.view(n_auth, -1, self.output_size).expand(n_auth, n_steps, self.output_size)
+            # reshape and expand b to size (n_auth*n_steps*vocab_size)
+            b = self.decoder_b.view(n_auth, -1, self.output_size).expand(n_auth, n_steps, self.output_size)
 
-        # output is size seq * batch_size * vocab
-        dec_out = torch.baddbmm(b, rnn_out.transpose(0,1), W).transpose(0,1)
+            # output is size seq * batch_size * vocab
+            dec_out = torch.baddbmm(b, rnn_out.transpose(0,1), W).transpose(0,1)
 
-        if compute_softmax:
-            prob_out = self.softmax(dec_out.contiguous().view(-1, self.output_size)).view(n_steps, n_auth, self.output_size)
-        else:
-            prob_out = dec_out
+            if compute_softmax:
+                prob_out = self.softmax(dec_out.contiguous().view(-1, self.output_size)).view(n_steps, n_auth, self.output_size)
+            else:
+                prob_out = dec_out
 
         return prob_out, hidden
 
@@ -210,50 +211,48 @@ class CharLstm(nn.Module):
         # n_steps x 1 dimensional, i.e only one sample string generation at a time. Generation is
         # done using target author.
 
-        n_auth = self.num_output_layers
-        n_steps = x.size(0)
-        x = Variable(x,volatile=True).to(self.device)
-        emb = self.encoder(x)
-        # No need for any packing here
-        packed = emb
+        with torch.no_grad():
+            n_auth = self.num_output_layers
+            n_steps = x.size(0)
+            x = Variable(x).to(self.device)
+            emb = self.encoder(x)
+            # No need for any packing here
+            packed = emb
 
-        # Feed in the seed string. We are not intersted in these outputs except for the last one.
-        rnn_out, hidden = self._my_recurrent_layer(packed, h_prev)
+            # Feed in the seed string. We are not intersted in these outputs except for the last one.
+            rnn_out, hidden = self._my_recurrent_layer(packed, h_prev)
 
-        W = self.decoder_W[target_auth.to(self.device)][0]
-        # reshape and expand b to size (batch*n_steps*vocab_size)
-        b = self.decoder_b[target_auth.to(self.device)].view(1, self.output_size)
+            W = self.decoder_W[target_auth.to(self.device)][0]
+            # reshape and expand b to size (batch*n_steps*vocab_size)
+            b = self.decoder_b[target_auth.to(self.device)].view(1, self.output_size)
 
-        p_rnn = rnn_out[-1]
-        char_out = []
+            p_rnn = rnn_out[-1]
+            char_out = []
 
-        for i in xrange(n_max):
-            # output is size seq * batch_size * vocab
-            dec_out = p_rnn.mm(W) + b
-            max_sc, pred_c = dec_out.max(dim=-1)
-            char_out.append(pred_c)
-            if 0:#pred_c == end_c:
-                break
-            else:
-                emb = self.encoder(pred_c)
-                # No need for any packing here
-                packed = emb
-                p_rnn, hidden = self._my_recurrent_layer(packed, hidden)
-                p_rnn = p_rnn[-1]
+            for i in xrange(n_max):
+                # output is size seq * batch_size * vocab
+                dec_out = p_rnn.mm(W) + b
+                max_sc, pred_c = dec_out.max(dim=-1)
+                char_out.append(pred_c)
+                if 0:#pred_c == end_c:
+                    break
+                else:
+                    emb = self.encoder(pred_c)
+                    # No need for any packing here
+                    packed = emb
+                    p_rnn, hidden = self._my_recurrent_layer(packed, hidden)
+                    p_rnn = p_rnn[-1]
 
         return char_out
 
-    def forward_classify(self, x, h_prev=None, compute_softmax = False, predict_mode=False, adv_inp=False, lens=None, drop=True):
+    def forward_classify(self, x, h_prev=None, compute_softmax = False, adv_inp=False, lens=None, drop=True):
         # x should be a numpy array of n_seq x n_batch dimensions
         # In this case batch will be a single sequence.
         n_auth = self.num_output_layers
         n_steps = x.size(0)
         b_sz = x.size(1)
         if not adv_inp:
-            if predict_mode:
-                x = Variable(x,volatile=True).to(self.device)
-            else:
-                x = Variable(x).to(self.device)
+            x = Variable(x).to(self.device)
 
             if self.compression_layer:
                 compressed_x = self.compression_W(x).view(n_steps*b_sz, -1)

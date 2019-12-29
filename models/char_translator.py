@@ -207,10 +207,8 @@ class CharTranslator(nn.Module):
 
         if not self.no_encoder:
             if not adv_inp:
-                if self.training:
-                    inp = Variable(inp).to(self.device)
-                else:
-                    inp = Variable(inp,volatile=True).to(self.device)
+                torch.set_grad_enabled(self.training)
+                inp = Variable(inp).to(self.device)
 
                 emb = self.emb_drop(self.char_emb(inp))
             else:
@@ -292,10 +290,8 @@ class CharTranslator(nn.Module):
         n_steps = x.size(0)
         b_sz = x.size(1)
         if not adv_inp:
-            if self.training:
-                x = Variable(x).to(self.device)
-            else:
-                x = Variable(x,volatile=True).to(self.device)
+            torch.set_grad_enabled(self.training)
+            x = Variable(x).to(self.device)
 
             emb = self.char_emb(x)
         else:
@@ -322,10 +318,8 @@ class CharTranslator(nn.Module):
         n_steps = x.size(0)
         b_sz = x.size(1)
         if not adv_inp:
-            if self.training:
-                x = Variable(x).to(self.device)
-            else:
-                x = Variable(x,volatile=True).to(self.device)
+            torch.set_grad_enabled(self.training)
+            x = Variable(x).to(self.device)
 
             emb = self.char_emb(x)
         else:
@@ -411,10 +405,9 @@ class CharTranslator(nn.Module):
 
         n_steps = x.size(0)
         b_sz = x.size(1)
-        if self.training:
-            x = Variable(x).to(self.device)
-        else:
-            x = Variable(x,volatile=True).to(self.device)
+
+        torch.set_grad_enabled(self.training)
+        x = Variable(x).to(self.device)
 
         emb = self.emb_drop(self.char_emb(x))
         packed = emb
