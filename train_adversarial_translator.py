@@ -465,11 +465,11 @@ def main(params):
                     real_aid_out.backward(mone)
                     gen_aid_out.backward(one)
 
-                avgL_const+= loss_constraint.data.cpu().numpy()[0]
-            accum_diff_eval[targ_aid] += loss_aid.data.cpu().numpy()[0]
+                avgL_const+= loss_constraint.item()
+            accum_diff_eval[targ_aid] += loss_aid.item()
             accum_count_eval[targ_aid] += 1.
             optimEval.step()
-            avgL_eval += lossEval.data.cpu().numpy()[0]
+            avgL_eval += lossEval.item()
             # Calculate discrim accuracy on generator samples.
             # This works only because it is binary target variable
             it2 += 1
@@ -650,10 +650,10 @@ def main(params):
         torch.nn.utils.clip_grad_norm(modelGen.parameters(), params['grad_clip'])
         # Take an optimization step
         optimGen.step()
-        avgL_gen += lossGenTot.data.cpu().numpy()[0]
-        avgL_genGan += lossGen.data.cpu().numpy()[0]
-        avg_cyc_loss += cyc_loss.data.cpu().numpy()[0] if type(cyc_loss) != float else cyc_loss
-        avg_feat_loss+= feature_match_loss.data.cpu().numpy()[0] if type(feature_match_loss) != float else feature_match_loss
+        avgL_gen += lossGenTot.item()
+        avgL_genGan += lossGen.item()
+        avg_cyc_loss += cyc_loss.item() if type(cyc_loss) != float else cyc_loss
+        avg_feat_loss+= feature_match_loss.item() if type(feature_match_loss) != float else feature_match_loss
         #===========================================================================
 
         # Visualize some generator samples once in a while

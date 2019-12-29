@@ -139,8 +139,8 @@ def main(params):
         # Take an optimization step
         optim.step()
 
-        total_loss += loss.data.cpu().numpy()[0]
-        class_loss += lossClass.data.cpu().numpy()[0]
+        total_loss += loss.item()
+        class_loss += lossClass.item()
 
         # Save the hidden states in cache for later use
         if params['randomize_batches']:

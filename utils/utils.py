@@ -230,7 +230,7 @@ def eval_translator(dp, model, params, char_to_ix, auth_to_ix, split='val', max_
         output, hidden = model.forward_mltrain(inps, lens, inps, lens, hidden_zero, compute_softmax=False, auths=auths)
         targets = pack_padded_sequence(Variable(targs).to(params['device']),lens)
         loss = criterion(pack_padded_sequence(output,lens)[0], targets[0])
-        total_loss += loss.data.cpu().numpy()[0]
+        total_loss += loss.item()
 
     cur_loss = total_loss / i
     perplexity = np.exp(cur_loss)

@@ -86,7 +86,7 @@ class MLP_classifier(nn.Module):
             # Take an optimization step
             optim.step()
 
-            total_loss += loss.data.cpu().numpy()[0]
+            total_loss += loss.item()
 
             if i % 2000 == 0 and i > 0:
                 cur_loss = total_loss / 2000.
