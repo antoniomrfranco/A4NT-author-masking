@@ -68,10 +68,10 @@ def disp_gen_samples(device, modelGen, modelEval, dp, misc, maxlen=100, n_disp=5
     gen_lens, char_outs, rev_lens, rev_char_outs = outs[-5], outs[-4], outs[-2], outs[-1]
     print '----------------------Visualising Some Generated Samples-----------------------------------------\n'
     for i in xrange(len(lens)):
-        print '%d Inp : %6s --> %s' % (i, misc['ix_to_auth'][auths[i]], jc.join([ix_to_char[c] for c in inps.numpy()[1:, i] if c in ix_to_char]))
-        print '  Out : %6s --> %s' % (misc['ix_to_auth'][1-auths[i]], jc.join([ix_to_char[c[i]] for c in char_outs[:gen_lens[i]] if c[i] in ix_to_char]))
+        print '%d Inp : %6s --> %s' % (i, misc['ix_to_auth'][auths[i].item()], jc.join([ix_to_char[c] for c in inps.numpy()[1:, i] if c in ix_to_char]))
+        print '  Out : %6s --> %s' % (misc['ix_to_auth'][1-auths[i].item()], jc.join([ix_to_char[c[i]] for c in char_outs[:gen_lens[i]] if c[i] in ix_to_char]))
         #print '%d Inp : %s --> %s' % (0, misc['ix_to_auth'][auths[0]], ' '.join([ix_to_char[c] for c in inps.numpy()[1:, 0] if c in ix_to_char]))
-        print '  Rev : %6s --> %s\n' % (misc['ix_to_auth'][auths[i]], jc.join([ix_to_char[c[i]] for c in rev_char_outs[:rev_lens[i]] if c[i] in ix_to_char]))
+        print '  Rev : %6s --> %s\n' % (misc['ix_to_auth'][auths[i].item()], jc.join([ix_to_char[c[i]] for c in rev_char_outs[:rev_lens[i]] if c[i] in ix_to_char]))
     print '\n-------------------------------------------------------------------------------------------------'
     modelGen.train()
     modelEval.train()
@@ -106,13 +106,13 @@ def adv_forward_pass(device, modelGen, modelEval, inps, lens, end_c=0, backprop_
         1, Variable(gen_lensort_idx, requires_grad=False))
     if backprop_for == 'eval':
         gen_samples_srt = gen_samples_srt.detach()
-        gen_samples_srt.volatile = False
 
     #---------------------------------------------------
     # Now pass the generated samples to the evaluator
     # output has format: [auth_classifier out, hidden state, generic classifier out (optional])
     #---------------------------------------------------
-    eval_out_gen = modelEval.forward_classify(gen_samples_srt, adv_inp=True, lens=len_sorted.tolist(), drop = (backprop_for=='eval'))
+    with torch.no_grad():
+        eval_out_gen = modelEval.forward_classify(gen_samples_srt, adv_inp=True, lens=len_sorted.tolist(), drop = (backprop_for=='eval'))
     # Undo the sorting here
     eval_out_gen_sort = eval_out_gen[0].index_select(0, rev_sort_idx)
 
@@ -278,13 +278,13 @@ def main(params):
     alpha = torch.FloatTensor([0]).to(device)
     alpha = Variable(alpha, requires_grad=True)
 
-    optimAlpha= torch.optim.Adam([alpha], lr=-params['weight_penalty'])
+    optimAlpha= torch.optim.Adam([alpha], lr=params['weight_penalty'])
 
     mLcriterion = nn.CrossEntropyLoss()
     eval_criterion = nn.CrossEntropyLoss()
     # Do size averaging here so that classes are balanced
-    bceLogitloss = nn.BCEWithLogitsLoss(size_average=True)
-    eval_generic = nn.BCELoss(size_average=True)
+    bceLogitloss = nn.BCEWithLogitsLoss(reduction='mean')
+    eval_generic = nn.BCELoss(reduction='mean')
     cycle_loss_func = nn.CrossEntropyLoss() if params['cycle_loss_type'] == 'ml' else nn.CosineEmbeddingLoss(margin=0.1) if params['cycle_loss_func'] == 'cosine' else nn.L1Loss()
     featmatch_l2_loss = nn.L1Loss()
     ml_criterion = nn.CrossEntropyLoss()
@@ -615,7 +615,7 @@ def main(params):
                 gen_aid_out = outs[0][:, targ_aid]
                 if not params['maximize_entropy']:
                     if params['weigh_difficult'] > 0.:
-                        loss_aid = FN.binary_cross_entropy_with_logits(gen_aid_out, ones[:gen_aid_out.size(0)],sample_weight, size_average=True)
+                        loss_aid = FN.binary_cross_entropy_with_logits(gen_aid_out, ones[:gen_aid_out.size(0)],sample_weight, reduction='mean')
                     else:
                         loss_aid = (bceLogitloss(gen_aid_out, ones[:gen_aid_out.size(0)])).mean()
                 elif params['maximize_entropy']==1:
