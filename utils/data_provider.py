@@ -248,7 +248,7 @@ class DataProvider():
             import ipdb;ipdb.set_trace()
 
         sidx = np.random.randint(0,len(sents),1) if sidx == None else sidx
-        s = sents[sidx].split()
+        s = sents[sidx].split() if type(sidx) == int else sents[sidx[0]].split()
 
         targ = s[1:]
         inp = s[:-1]
