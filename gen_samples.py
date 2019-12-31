@@ -76,6 +76,7 @@ def main(params):
         ix_to_char = saved_model['ix_to_char']
         ix_to_auth = saved_model['ix_to_auth']
     cp_params = saved_model['arch']
+    cp_params['device'] = params['device']
     if params['softmax_scale']:
         cp_params['softmax_scale'] = params['softmax_scale']
 
