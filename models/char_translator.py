@@ -16,8 +16,8 @@ def sample_gumbel(x):
 
 def gumbel_softmax_sample(x, tau=0.2, hard=False):
     noise = sample_gumbel(x)
-    y = (FN.log_softmax(x) + noise) / tau
-    ysft = FN.softmax(y)
+    y = (FN.log_softmax(x, dim=-1) + noise) / tau
+    ysft = FN.softmax(y, dim=-1)
     if hard:
         max_v, max_idx = ysft.max(dim=1,keepdim=True)
         one_hot = Variable(ysft.data.new(ysft.size()).zero_().scatter_(1, max_idx.data, ysft.data.new(max_idx.size()).fill_(1.)) - ysft.data, requires_grad=False)
@@ -373,7 +373,7 @@ class CharTranslator(nn.Module):
         char_out = []
         samp_out = []
         gen_lens = torch.empty(dec_bsz, dtype=torch.int, device=self.device).zero_()
-        prev_done = torch.empty(dec_bsz, dtype=torch.uint8, device=self.device).zero_()
+        prev_done = torch.empty(dec_bsz, dtype=torch.bool, device=self.device).zero_()
 
         for i in xrange(n_max):
             # output is size seq * batch_size * vocab

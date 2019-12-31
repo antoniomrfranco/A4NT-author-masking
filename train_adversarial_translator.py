@@ -278,7 +278,7 @@ def main(params):
     alpha = torch.FloatTensor([0]).to(device)
     alpha = Variable(alpha, requires_grad=True)
 
-    optimAlpha= torch.optim.Adam([alpha], lr=-params['weight_penalty'])
+    optimAlpha= torch.optim.Adam([alpha], lr=params['weight_penalty'])
 
     mLcriterion = nn.CrossEntropyLoss()
     eval_criterion = nn.CrossEntropyLoss()
