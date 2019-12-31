@@ -115,11 +115,11 @@ def main(params):
         #char_outs = model.forward_gen(inps, hidden, auths_inp, n_max = cp_params['max_len'],end_c=char_to_ix['.'])
         print '--------------------------------------------'
         #print 'Translate from %s to %s'%(batch[0]['author'], ix_to_auth[auths_inp[0]])
-        print colored('Inp %6s: '%(ix_to_auth[auths[0]]),'green') + colored('%s'%(jc.join([ix_to_char[c[0]] for c in inps[1:]])),auth_colors[auths[0]])
-        print colored('Out %6s: '%(ix_to_auth[auths_inp[0]]),'grey')+ colored('%s'%(jc.join([ix_to_char[c.data.cpu()[0]] for c in outs[0] if c.data.cpu()[0] in ix_to_char])),auth_colors[auths_inp[0]])
+        print colored('Inp %6s: '%(ix_to_auth[auths[0].item()]),'green') + colored('%s'%(jc.join([ix_to_char[c[0].item()] for c in inps[1:]])),auth_colors[auths[0]])
+        print colored('Out %6s: '%(ix_to_auth[auths_inp[0].item()]),'grey')+ colored('%s'%(jc.join([ix_to_char[c[0].item()] for c in outs[0] if c[0].item() in ix_to_char])),auth_colors[auths_inp[0]])
 
         if params['show_rev']:
-            print colored('Rev %6s: '%(ix_to_auth[auths[0]]),'green')+ colored('%s'%(jc.join([ix_to_char[c.data.cpu()[0]] for c in outs[-1] if c.data.cpu()[0] in ix_to_char])),auth_colors[auths[0]])
+            print colored('Rev %6s: '%(ix_to_auth[auths[0].item()]),'green')+ colored('%s'%(jc.join([ix_to_char[c[0].item()] for c in outs[-1] if c[0].item() in ix_to_char])),auth_colors[auths[0]])
 
 
 
@@ -137,6 +137,8 @@ if __name__ == "__main__":
   parser.add_argument('--flip', dest='flip', type=int, default=0, help='flip authors')
 
   parser.add_argument('--softmax_scale', dest='softmax_scale', type=int, default=None, help='how many samples per sentence')
+
+  parser.add_argument('--device', dest='device', type=str, default='cpu')
 
   args = parser.parse_args()
   params = vars(args) # convert to ordinary dict
