@@ -13,9 +13,9 @@ from torch.nn.utils.rnn import pack_padded_sequence
 
 def repackage_hidden(h):
     """Wraps hidden states in new Variables, to detach them from their history."""
-    if type(h) == Variable:
-        return Variable(h.data)
-    elif h == None:
+    if isinstance(h, torch.Tensor):
+        return h.detach()
+    elif h is None:
         return None
     else:
         return tuple(repackage_hidden(v) for v in h)
