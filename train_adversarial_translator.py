@@ -599,7 +599,7 @@ def main(params):
                 langProb,_ = langModel[targ_aid].forward_mltrain(langModelInp, len_sorted.tolist(), langModelInp, len_sorted.tolist(), adv_targ=True)
                 langModelTarg = pack_padded_sequence(Variable(langModelInp.data[1:,:,:].max(dim=-1)[1]), len_sorted.tolist())
                 lang_loss = params['language_loss']*ml_criterion(pack_padded_sequence(langProb,len_sorted.tolist())[0], langModelTarg[0])
-                if lang_loss.data[0] >20:
+                if lang_loss.item() >20:
                     print 'Limiting loss', lang_loss
                     lang_loss = 0.
             else:
@@ -646,7 +646,7 @@ def main(params):
 
         # TODO
         # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
-        torch.nn.utils.clip_grad_norm(modelGen.parameters(), params['grad_clip'])
+        torch.nn.utils.clip_grad_norm_(modelGen.parameters(), params['grad_clip'])
         # Take an optimization step
         optimGen.step()
         avgL_gen += lossGenTot.item()
