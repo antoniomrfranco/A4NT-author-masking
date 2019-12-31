@@ -22,7 +22,7 @@ class CharLstm(nn.Module):
         self.emb_size = params.get('embedding_size',-1)
         self.hidden_size = params.get('hidden_size',-1)
         self.en_residual = params.get('en_residual_conn',0)
-        self.bidir = params.get('bidir',0)
+        self.bidir = bool(params.get('bidir',0))
         self.compression_layer = params.get('compression_layer',0)
 
         # Initialize the model layers
