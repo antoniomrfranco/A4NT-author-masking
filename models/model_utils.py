@@ -16,7 +16,7 @@ def packed_mean(packed, dim=0):
     unp_data = unp[0]
     lens = unp[1]
     sizes = unp_data.size()
-    mean = torch.sum(unp_data,dim=dim, keepdim=False)/Variable(torch.FloatTensor(lens).view(-1,1).expand(sizes[1],sizes[2]),requires_grad=False).to(unp_data.device)
+    mean = torch.sum(unp_data,dim=dim, keepdim=False) / lens.view(-1,1).expand(sizes[1],sizes[2]).to(unp_data.device)
     return mean
 
 def packed_add(p1,p2):
