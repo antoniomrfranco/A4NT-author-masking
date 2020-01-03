@@ -7,7 +7,6 @@ from models.model_utils import get_classifier
 from collections import defaultdict
 from utils.data_provider import DataProvider
 from utils.utils import repackage_hidden, eval_model, eval_classify
-from torch.autograd import Variable
 
 import torch
 import torch.nn as nn
@@ -120,12 +119,12 @@ def main(params):
         #TODO
         if params['mode'] == 'generative':
             output, hidden = model.forward(inps, lens, hidden, auths)
-            targets = pack_padded_sequence(Variable(targs).to(device),lens)
+            targets = pack_padded_sequence(targs.to(device),lens)
             loss = criterion(pack_padded_sequence(output,lens)[0], targets[0])
         else:
             # for classifier auths is the target
             output, _ = model.forward_classify(targs, hidden, compute_softmax=False, lens=lens)
-            targets = Variable(auths).to(device)
+            targets = auths.to(device)
             lossClass = criterion(output, targets)
             if params['compression_layer']:
                 loss = lossClass + (model.compression_W.weight.norm(p=1,dim=1)).mean()

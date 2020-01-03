@@ -8,7 +8,6 @@ from models.char_translator import CharTranslator
 from collections import defaultdict
 from utils.data_provider import DataProvider
 from utils.utils import repackage_hidden, eval_translator, eval_classify
-from torch.autograd import Variable
 
 import torch
 import torch.nn as nn
@@ -110,12 +109,12 @@ def main(params):
         #TODO
         if params['mode'] == 'generative':
             output, _ = model.forward_mltrain(inps, lens, inps, lens, hidden_zeros, auths=auths)
-            targets = pack_padded_sequence(Variable(targs).to(device),lens)
+            targets = pack_padded_sequence(targs.to(device),lens)
             loss = criterion(pack_padded_sequence(output,lens)[0], targets[0])
         else:
             # for classifier auths is the target
             output, hidden = model.forward_classify(inps, hidden, compute_softmax=True)
-            targets = Variable(auths).to(device)
+            targets = auths.to(device)
             loss = criterion(output, targets)
         loss.backward()
 

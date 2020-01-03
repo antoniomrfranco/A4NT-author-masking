@@ -1,7 +1,6 @@
 import torch
 import torch.utils.data
 import torch.nn as nn
-from torch.autograd import Variable
 from torch import tensor
 from tqdm import trange, tqdm
 import numpy as np
@@ -42,7 +41,7 @@ class MLP_classifier(nn.Module):
             self.lin_layers[i].bias.data.fill_(0)
 
     def forward(self, x, compute_softmax = False):
-        x = Variable(x).to(self.device)
+        x = x.to(self.device)
         prev_out = x
 
         for i in xrange(len(self.hid_dims)-1):
@@ -77,7 +76,7 @@ class MLP_classifier(nn.Module):
         for i in tqdm(xrange(total_iters)):
             optim.zero_grad()
             b_ids = np.random.choice(idxes, size=b_sz)
-            targets = Variable(torch.from_numpy(targs[b_ids])).to(self.device)
+            targets = torch.from_numpy(targs[b_ids]).to(self.device)
 
             output = self.forward(torch.from_numpy(features[b_ids,:]))
             loss = criterion(output, targets)

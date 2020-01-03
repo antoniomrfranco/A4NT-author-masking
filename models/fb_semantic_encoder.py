@@ -9,7 +9,6 @@ import numpy as np
 import time
 
 import torch
-from torch.autograd import Variable
 import torch.nn as nn
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
@@ -61,7 +60,7 @@ class BLSTMEncoder(nn.Module):
 
     def forward(self, sent_tuple):
         # sent_len: [max_len, ..., min_len] (bsize)
-        # sent: Variable(seqlen x bsize x worddim)
+        # sent: Tensor(seqlen x bsize x worddim)
         sent, sent_len = sent_tuple
 
         # Sort by length (keep idx)
@@ -69,7 +68,7 @@ class BLSTMEncoder(nn.Module):
         idx_unsort = np.argsort(idx_sort)
 
         idx_sort = torch.from_numpy(idx_sort).to(self.device)
-        sent = sent.index_select(1, Variable(idx_sort))
+        sent = sent.index_select(1, idx_sort)
 
         # Handling padding in Recurrent Networks
         sent_packed = nn.utils.rnn.pack_padded_sequence(sent, sent_len)
@@ -78,11 +77,11 @@ class BLSTMEncoder(nn.Module):
 
         # Un-sort by length
         idx_unsort = torch.from_numpy(idx_unsort).to(self.device)
-        sent_output = sent_output.index_select(1, Variable(idx_unsort))
+        sent_output = sent_output.index_select(1, idx_unsort)
 
         # Pooling
         if self.pool_type == "mean":
-            sent_len = Variable(torch.FloatTensor(sent_len)).unsqueeze(1).to(self.device)
+            sent_len = torch.FloatTensor(sent_len).unsqueeze(1).to(self.device)
             emb = torch.sum(sent_output, 0).squeeze(0)
             emb = emb / sent_len.expand_as(emb)
         elif self.pool_type == "max":
@@ -220,26 +219,31 @@ class BLSTMEncoder(nn.Module):
         return sentences, lengths, idx_sort
 
     def forward_encode(self, x, lens, adv_inp=False):
+        prev_grad_enabled = torch.is_grad_enabled()
+        grad_enabled = prev_grad_enabled
+
         n_steps = x.size(0)
         b_sz = x.size(1)
         if not adv_inp:
             if self.training:
-                x = Variable(x).to(self.device)
+                grad_enabled = prev_grad_enabled
             else:
-                x = Variable(x,volatile=True).to(self.device)
+                grad_enabled = False
+            x = x.to(self.device)                
             emb = self.emb_layer(x)
         else:
             emb = x.view(n_steps*b_sz,-1).mm(self.emb_layer.weight).view(n_steps, b_sz, -1)
 
-        packed = pack_padded_sequence(emb, lens)
+        with torch.set_grad_enabled(grad_enabled):
+            packed = pack_padded_sequence(emb, lens)
 
-        sent_output = self.enc_lstm(packed)[0]  # seqlen x batch x 2*nhid
-        sent_output = pad_packed_sequence(sent_output)[0]
+            sent_output = self.enc_lstm(packed)[0]  # seqlen x batch x 2*nhid
+            sent_output = pad_packed_sequence(sent_output)[0]
 
-        if self.pool_type == "mean":
-            print 'not implemented'
-        elif self.pool_type == "max":
-            emb = torch.max(sent_output, 0)[0]
+            if self.pool_type == "mean":
+                print 'not implemented'
+            elif self.pool_type == "max":
+                emb = torch.max(sent_output, 0)[0]
 
         return emb
 
@@ -250,11 +254,12 @@ class BLSTMEncoder(nn.Module):
 
         embeddings = []
         for stidx in range(0, len(sentences), bsize):
-            batch = Variable(self.get_batch(
-                        sentences[stidx:stidx + bsize]), volatile=True).to(self.device)
-            batch = self.forward(
-                (batch, lengths[stidx:stidx + bsize])).data.cpu().numpy()
-            embeddings.append(batch)
+            with torch.no_grad():
+                batch = self.get_batch(
+                            sentences[stidx:stidx + bsize]).to(self.device)
+                batch = self.forward(
+                    (batch, lengths[stidx:stidx + bsize])).data.cpu().numpy()
+                embeddings.append(batch)
         embeddings = np.vstack(embeddings)
 
         # unsort
@@ -279,10 +284,11 @@ class BLSTMEncoder(nn.Module):
             import warnings
             warnings.warn('No words in "{0}" have glove vectors. Replacing \
                            by "<s> </s>"..'.format(sent))
-        batch = Variable(self.get_batch(sent), volatile=True).to(self.device)
+        with torch.no_grad():
+            batch = self.get_batch(sent).to(self.device)
 
-        output = self.enc_lstm(batch)[0]
-        output, idxs = torch.max(output, 0)
+            output = self.enc_lstm(batch)[0]
+            output, idxs = torch.max(output, 0)
         # output, idxs = output.squeeze(), idxs.squeeze()
         idxs = idxs.data.cpu().numpy()
         argmaxs = [np.sum((idxs == k)) for k in range(len(sent[0]))]

@@ -1,12 +1,11 @@
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from torch import tensor
 from model_utils import packed_mean, packed_add
 import torch.nn.functional as FN
 import numpy as np
-from torch.autograd import Variable, Function
+from torch.autograd import Function
 
 
 class CharLstm(nn.Module):
@@ -119,8 +118,8 @@ class CharLstm(nn.Module):
     def init_hidden(self, bsz):
         # Weight initializations for various parts.
         weight = next(self.parameters()).data
-        return (Variable(weight.new(self.num_rec_layers*(1+self.bidir), bsz, self.hidden_size).zero_()),
-                    Variable(weight.new(self.num_rec_layers*(1+self.bidir), bsz, self.hidden_size).zero_()))
+        return (weight.new(self.num_rec_layers*(1+self.bidir), bsz, self.hidden_size).zero_(),
+                    weight.new(self.num_rec_layers*(1+self.bidir), bsz, self.hidden_size).zero_())
 
     def _my_recurrent_layer(self, packed, h_prev = None):
         if self.en_residual:
@@ -150,7 +149,7 @@ class CharLstm(nn.Module):
         # x should be a numpy array of n_seq x n_batch dimensions
         b_sz = x.size(1)
         n_steps = x.size(0)
-        x = Variable(x).to(self.device)
+        x = x.to(self.device)
         emb = self.enc_drop(self.encoder(x))
         packed = pack_padded_sequence(emb, lengths)
 
@@ -179,28 +178,30 @@ class CharLstm(nn.Module):
         # In this case batch will be a single sequence.
         n_auth = self.num_output_layers
         n_steps = x.size(0)
-        x = Variable(x,volatile=True).to(self.device)
-        # No Dropout needed
-        emb = self.encoder(x)
-        # No need for any packing here
-        packed = emb
+        
+        with torch.no_grad():
+            x = x.to(self.device)
+            # No Dropout needed
+            emb = self.encoder(x)
+            # No need for any packing here
+            packed = emb
 
-        rnn_out, hidden = self._my_recurrent_layer(packed, h_prev)
+            rnn_out, hidden = self._my_recurrent_layer(packed, h_prev)
 
-        # implement the multi-headed RNN.
-        rnn_out = rnn_out.expand(n_steps, n_auth, self.hidden_size)
-        W = self.decoder_W
+            # implement the multi-headed RNN.
+            rnn_out = rnn_out.expand(n_steps, n_auth, self.hidden_size)
+            W = self.decoder_W
 
-        # reshape and expand b to size (n_auth*n_steps*vocab_size)
-        b = self.decoder_b.view(n_auth, -1, self.output_size).expand(n_auth, n_steps, self.output_size)
+            # reshape and expand b to size (n_auth*n_steps*vocab_size)
+            b = self.decoder_b.view(n_auth, -1, self.output_size).expand(n_auth, n_steps, self.output_size)
 
-        # output is size seq * batch_size * vocab
-        dec_out = torch.baddbmm(b, rnn_out.transpose(0,1), W).transpose(0,1)
+            # output is size seq * batch_size * vocab
+            dec_out = torch.baddbmm(b, rnn_out.transpose(0,1), W).transpose(0,1)
 
-        if compute_softmax:
-            prob_out = self.softmax(dec_out.contiguous().view(-1, self.output_size)).view(n_steps, n_auth, self.output_size)
-        else:
-            prob_out = dec_out
+            if compute_softmax:
+                prob_out = self.softmax(dec_out.contiguous().view(-1, self.output_size)).view(n_steps, n_auth, self.output_size)
+            else:
+                prob_out = dec_out
 
         return prob_out, hidden
 
@@ -212,34 +213,36 @@ class CharLstm(nn.Module):
 
         n_auth = self.num_output_layers
         n_steps = x.size(0)
-        x = Variable(x,volatile=True).to(self.device)
-        emb = self.encoder(x)
-        # No need for any packing here
-        packed = emb
 
-        # Feed in the seed string. We are not intersted in these outputs except for the last one.
-        rnn_out, hidden = self._my_recurrent_layer(packed, h_prev)
+        with torch.no_grad():
+            x = x.to(self.device)
+            emb = self.encoder(x)
+            # No need for any packing here
+            packed = emb
 
-        W = self.decoder_W[target_auth.to(self.device)][0]
-        # reshape and expand b to size (batch*n_steps*vocab_size)
-        b = self.decoder_b[target_auth.to(self.device)].view(1, self.output_size)
+            # Feed in the seed string. We are not intersted in these outputs except for the last one.
+            rnn_out, hidden = self._my_recurrent_layer(packed, h_prev)
 
-        p_rnn = rnn_out[-1]
-        char_out = []
+            W = self.decoder_W[target_auth.to(self.device)][0]
+            # reshape and expand b to size (batch*n_steps*vocab_size)
+            b = self.decoder_b[target_auth.to(self.device)].view(1, self.output_size)
 
-        for i in xrange(n_max):
-            # output is size seq * batch_size * vocab
-            dec_out = p_rnn.mm(W) + b
-            max_sc, pred_c = dec_out.max(dim=-1)
-            char_out.append(pred_c)
-            if 0:#pred_c == end_c:
-                break
-            else:
-                emb = self.encoder(pred_c)
-                # No need for any packing here
-                packed = emb
-                p_rnn, hidden = self._my_recurrent_layer(packed, hidden)
-                p_rnn = p_rnn[-1]
+            p_rnn = rnn_out[-1]
+            char_out = []
+
+            for i in xrange(n_max):
+                # output is size seq * batch_size * vocab
+                dec_out = p_rnn.mm(W) + b
+                max_sc, pred_c = dec_out.max(dim=-1)
+                char_out.append(pred_c)
+                if 0:#pred_c == end_c:
+                    break
+                else:
+                    emb = self.encoder(pred_c)
+                    # No need for any packing here
+                    packed = emb
+                    p_rnn, hidden = self._my_recurrent_layer(packed, hidden)
+                    p_rnn = p_rnn[-1]
 
         return char_out
 
@@ -249,20 +252,27 @@ class CharLstm(nn.Module):
         n_auth = self.num_output_layers
         n_steps = x.size(0)
         b_sz = x.size(1)
+
+        prev_grad_enabled = torch.is_grad_enabled()
+        grad_enabled = prev_grad_enabled
+
         if not adv_inp:
             if predict_mode:
-                x = Variable(x,volatile=True).to(self.device)
+                grad_enabled = False
             else:
-                x = Variable(x).to(self.device)
+                grad_enabled = prev_grad_enabled
 
-            if self.compression_layer:
-                compressed_x = self.compression_W(x).view(n_steps*b_sz, -1)
-                qn = torch.norm(compressed_x, p=1, dim=1).view(-1,1).expand_as(compressed_x) + 1e-8
-                enc_x = compressed_x.div(qn).mm(self.encoder.weight).view(n_steps,b_sz, -1)
-            else:
-                enc_x = self.encoder(x)
+            x = x.to(self.device)
 
-            emb = self.enc_drop(enc_x) if drop else enc_x 
+            with torch.set_grad_enabled(grad_enabled):
+                if self.compression_layer:
+                    compressed_x = self.compression_W(x).view(n_steps*b_sz, -1)
+                    qn = torch.norm(compressed_x, p=1, dim=1).view(-1,1).expand_as(compressed_x) + 1e-8
+                    enc_x = compressed_x.div(qn).mm(self.encoder.weight).view(n_steps,b_sz, -1)
+                else:
+                    enc_x = self.encoder(x)
+
+                emb = self.enc_drop(enc_x) if drop else enc_x 
         else:
             if self.compression_layer:
                 compressed_x = x.view(n_steps*b_sz,-1).mm(self.compression_W.weight)
@@ -272,51 +282,52 @@ class CharLstm(nn.Module):
                 emb_mul = x.view(n_steps*b_sz,-1).mm(self.encoder.weight).view(n_steps,b_sz, -1)
             emb = self.enc_drop(emb_mul) if drop else emb_mul
 
-        # Pack the sentences as they can be of different lens
-        packed = pack_padded_sequence(emb, lens)
+        with torch.set_grad_enabled(grad_enabled):
+            # Pack the sentences as they can be of different lens
+            packed = pack_padded_sequence(emb, lens)
 
-        rnn_out, hidden = self._my_recurrent_layer(packed, h_prev)
+            rnn_out, hidden = self._my_recurrent_layer(packed, h_prev)
 
 
-        if not hasattr(self, 'decoder_cnnlayer'):
-            if self.max_pool_rnn==1:
-                ctxt = torch.cat([packed_mean(rnn_out,dim=0), hidden[0][-1]],dim=-1)
-                enc_out = self.dec_drop(ctxt) if drop else ctxt
-            elif self.max_pool_rnn==2:
-                rnn_unp,_= pad_packed_sequence(rnn_out)
-                ctxt,_ = rnn_unp.max(dim=0)
-                enc_out = self.dec_drop(ctxt) if drop else ctxt
-            elif self.max_pool_rnn==3:
-                rnn_unp,_= pad_packed_sequence(rnn_out)
-                ctxt = torch.cat([rnn_unp.max(dim=0)[0],hidden[0].transpose(0,1).contiguous().view(b_sz,-1)],dim=-1)
-                enc_out = self.dec_drop(ctxt) if drop else ctxt
+            if not hasattr(self, 'decoder_cnnlayer'):
+                if self.max_pool_rnn==1:
+                    ctxt = torch.cat([packed_mean(rnn_out,dim=0), hidden[0][-1]],dim=-1)
+                    enc_out = self.dec_drop(ctxt) if drop else ctxt
+                elif self.max_pool_rnn==2:
+                    rnn_unp,_= pad_packed_sequence(rnn_out)
+                    ctxt,_ = rnn_unp.max(dim=0)
+                    enc_out = self.dec_drop(ctxt) if drop else ctxt
+                elif self.max_pool_rnn==3:
+                    rnn_unp,_= pad_packed_sequence(rnn_out)
+                    ctxt = torch.cat([rnn_unp.max(dim=0)[0],hidden[0].transpose(0,1).contiguous().view(b_sz,-1)],dim=-1)
+                    enc_out = self.dec_drop(ctxt) if drop else ctxt
+                else:
+                    enc_out = self.dec_drop(hidden[0][-1]) if drop else hidden[0][-1]
+                dec_in = enc_out
+
+            W = self.decoder_W
+            # reshape and expand b to size (n_auth*n_steps*vocab_size)
+            b = self.decoder_b.expand(b_sz, self.num_output_layers)
+            if hasattr(self,'decoder_mlp'):
+                b_dec_mlp = self.decoder_b_mlp.expand(b_sz, self.decoder_b_mlp.size(0))
+                dec_in = FN.tanh(enc_out.mm(self.decoder_W_mlp) + b_dec_mlp)
+            elif hasattr(self, 'decoder_cnnlayer'):
+                rnn_unpacked,_ = pad_packed_sequence(rnn_out)
+                rnn_unpacked = rnn_unpacked.permute(1,2,0)
+                cnn_out = [FN.leaky_relu(conv(rnn_unpacked)) for conv in self.decoder_cnn]
+                cnn_pool_out = [FN.max_pool1d(cn, cn.size(2)).squeeze(2) for cn in cnn_out]
+                dec_in = self.dec_drop(torch.cat(cnn_pool_out, dim=1))
+                enc_out = dec_in
+
+            dec_out = dec_in.mm(W) + b
+            if compute_softmax:
+                prob_out = self.softmax(dec_out.contiguous().view(-1, self.num_output_layers))
             else:
-                enc_out = self.dec_drop(hidden[0][-1]) if drop else hidden[0][-1]
-            dec_in = enc_out
+                prob_out = dec_out
 
-        W = self.decoder_W
-        # reshape and expand b to size (n_auth*n_steps*vocab_size)
-        b = self.decoder_b.expand(b_sz, self.num_output_layers)
-        if hasattr(self,'decoder_mlp'):
-            b_dec_mlp = self.decoder_b_mlp.expand(b_sz, self.decoder_b_mlp.size(0))
-            dec_in = FN.tanh(enc_out.mm(self.decoder_W_mlp) + b_dec_mlp)
-        elif hasattr(self, 'decoder_cnnlayer'):
-            rnn_unpacked,_ = pad_packed_sequence(rnn_out)
-            rnn_unpacked = rnn_unpacked.permute(1,2,0)
-            cnn_out = [FN.leaky_relu(conv(rnn_unpacked)) for conv in self.decoder_cnn]
-            cnn_pool_out = [FN.max_pool1d(cn, cn.size(2)).squeeze(2) for cn in cnn_out]
-            dec_in = self.dec_drop(torch.cat(cnn_pool_out, dim=1))
-            enc_out = dec_in
-
-        dec_out = dec_in.mm(W) + b
-        if compute_softmax:
-            prob_out = self.softmax(dec_out.contiguous().view(-1, self.num_output_layers))
-        else:
-            prob_out = dec_out
-
-        if hasattr(self,'generic_W'):
-            generic_score = enc_out.mm(self.generic_W) + self.generic_b.view(1,1).expand(b_sz,1)
-            generic_class = FN.sigmoid(generic_score)
-            return prob_out, hidden, generic_class
-        else:
-            return prob_out, enc_out
+            if hasattr(self,'generic_W'):
+                generic_score = enc_out.mm(self.generic_W) + self.generic_b.view(1,1).expand(b_sz,1)
+                generic_class = FN.sigmoid(generic_score)
+                return prob_out, hidden, generic_class
+            else:
+                return prob_out, enc_out

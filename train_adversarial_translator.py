@@ -8,7 +8,7 @@ from models.char_translator import CharTranslator
 from collections import defaultdict
 from utils.data_provider import DataProvider
 from utils.utils import repackage_hidden, eval_translator, eval_classify
-from torch.autograd import Variable, Function
+from torch.autograd import Function
 import torch.nn.functional as FN
 
 from models.fb_semantic_encoder import BLSTMEncoder
@@ -94,7 +94,7 @@ def adv_forward_pass(device, modelGen, modelEval, inps, lens, end_c=0, backprop_
     #--------------------------------------------------------------------------
     len_sorted, gen_lensort_idx = gen_lens.sort(dim=0, descending=True)
     _, rev_sort_idx = gen_lensort_idx.sort(dim=0)
-    rev_sort_idx = Variable(rev_sort_idx, requires_grad=False)
+    rev_sort_idx.requires_grad=False
 
     #--------------------------------------------------------------------------
     gen_samples_tensor = torch.cat([torch.unsqueeze(gs, 0) for gs in gen_samples], dim=0)
@@ -102,10 +102,10 @@ def adv_forward_pass(device, modelGen, modelEval, inps, lens, end_c=0, backprop_
     gen_samples_tensor = GradFilterLayer(gen_samples_tensor) if GradFilterLayer else gen_samples_tensor
 
     gen_samples_srt = gen_samples_tensor.index_select(
-        1, Variable(gen_lensort_idx, requires_grad=False))
+        1, gen_lensort_idx.requires_grad_(False))
     if backprop_for == 'eval':
         gen_samples_srt = gen_samples_srt.detach()
-        gen_samples_srt.volatile = False
+        gen_samples_srt.volatile = False # volatile is always false and has ho efect anymore
 
     #---------------------------------------------------
     # Now pass the generated samples to the evaluator
@@ -246,7 +246,7 @@ def main(params):
             if lang_model_cp['char_to_ix'] != char_to_ix:
                 orig_chartoix = lang_model_cp['char_to_ix']
                 ix_to_oix = {ix:orig_chartoix[c] if c in orig_chartoix else orig_chartoix['UNK'] for c, ix in char_to_ix.items()}
-                mapVocabToLangModel[lmix] = Variable(torch.empty(len(ix_to_oix)+1, len(orig_chartoix)+1, dtype=torch.float, device=device).zero_(),requires_grad=False)
+                mapVocabToLangModel[lmix] = torch.empty(len(ix_to_oix)+1, len(orig_chartoix)+1, dtype=torch.float, device=device).zero_().requires_grad_(False)
                 for i in ix_to_oix:
                     mapVocabToLangModel[lmix].data[i,ix_to_oix[i]] = 1.
 
@@ -275,7 +275,7 @@ def main(params):
                                     eps=params['smooth_eps'])
     # For fisher gan setup the lagrange multiplier alpha
     alpha = torch.FloatTensor([0]).to(device)
-    alpha = Variable(alpha, requires_grad=True)
+    alpha.requires_grad = True
 
     optimAlpha= torch.optim.Adam([alpha], lr=params['weight_penalty'])
 
@@ -353,19 +353,19 @@ def main(params):
     leakage = 0.  # params['leakage']
     append_tensor = np.zeros((1, params['batch_size'], params['vocabulary_size'] + 1), dtype=np.float32)
     append_tensor[:, :, misc['char_to_ix'][misc['startc']]] = 1
-    append_tensor = Variable(torch.FloatTensor(
-        append_tensor), requires_grad=False).to(device)
+    append_tensor = torch.FloatTensor(
+        append_tensor).requires_grad_(False).to(device)
     # Another for the displaying cycle reconstruction
     append_tensor_disp = np.zeros((1, 5, params['vocabulary_size'] + 1), dtype=np.float32)
     append_tensor_disp[:, :, misc['char_to_ix'][misc['startc']]] = 1
-    append_tensor_disp = Variable(torch.FloatTensor(
-        append_tensor_disp), requires_grad=False).to(device)
+    append_tensor_disp = torch.FloatTensor(
+        append_tensor_disp).requires_grad_(False).to(device)
 
 
     disp_gen_samples(device, modelGen, modelEval, dp, misc,
                      maxlen=params['max_seq_len'], atoms=params['atoms'], append_tensor=append_tensor_disp)
-    ones = Variable(torch.ones(params['batch_size'])).to(device)
-    zeros = Variable(torch.zeros(params['batch_size'])).to(device)
+    ones = torch.ones(params['batch_size']).to(device)
+    zeros = torch.zeros(params['batch_size']).to(device)
     one = torch.FloatTensor([1]).to(device)
     mone = one * -1
     print total_iters
@@ -395,7 +395,7 @@ def main(params):
                                     end_c=misc['char_to_ix'][misc['endc']], backprop_for='eval',
                                     maxlen=params['max_seq_len'], auths=auths, temp=params['gumbel_temp'])
 
-            targets = Variable(auths).to(device)
+            targets = auths.to(device)
             #---------------------------------------------------------------------
 
             #---------------------------------------------------------------------
@@ -510,7 +510,7 @@ def main(params):
 
             if params['ml_update']:
                 ml_output, _ = modelGen.forward_mltrain(gttargInps, gtlens, gttargInps, gtlens, auths=gttargauths)
-                mlTarg = pack_padded_sequence(Variable(gttargtargs).to(device), gtlens)
+                mlTarg = pack_padded_sequence(gttargtargs.to(device), gtlens)
                 mlLoss = params['ml_update']*ml_criterion(pack_padded_sequence(ml_output,gtlens)[0], mlTarg[0])
                 mlLoss.backward()#retain_variables=True)
 
@@ -537,12 +537,12 @@ def main(params):
                 feature_match_loss = 0.
 
             #---------------------------------------------------------------------
-            targets = Variable(auths).to(device)
+            targets = auths.to(device)
             if params['cycle_loss_type'] == 'bow':
                 # Does this make any sense!!?
-                cyc_targ = Variable(torch.empty(params['batch_size'],
+                cyc_targ = torch.empty(params['batch_size'],
                                                            params['vocabulary_size'] + 1, dtype=torch.float, device=device).zero_().scatter_add_(1, targs.transpose(0, 1).to(device),
-                                                                                                               torch.ones(targs.size()[::-1]).to(device)).index_fill_(1, torch.tensor([0], dtype=torch.long, device=device), 0), requires_grad=False)
+                                                                                                               torch.ones(targs.size()[::-1]).to(device)).index_fill_(1, torch.tensor([0], dtype=torch.long, device=device), 0).requires_grad_(False)
                 cyc_loss = params['cycle_loss_w'] * cycle_loss_func(outs[-3].sum(dim=0), cyc_targ)
                 rev_char_outs = outs[-1]; rev_gen_lens = outs[-2]
                 char_outs = outs[4]; gen_lens = outs[3]
@@ -553,8 +553,8 @@ def main(params):
                 gen_samples, gen_lens, char_outs, = outs[2], outs[3], outs[4]
                 len_sorted, gen_lensort_idx = gen_lens.sort(dim=0, descending=True)
                 _, rev_sort_idx = gen_lensort_idx.sort(dim=0)
-                rev_sort_idx = Variable(rev_sort_idx, requires_grad=False)
-                gen_samples_srt = gen_samples.index_select(1, Variable(gen_lensort_idx, requires_grad=False))
+                rev_sort_idx = rev_sort_idx.requires_grad_(False)
+                gen_samples_srt = gen_samples.index_select(1, gen_lensort_idx.requires_grad_(False))
                 enc_inp = torch.cat([append_tensor, gen_samples_srt])
                 #reverse_inp = reverse_inp.detach()
                 rev_enc = modelGenEncoder.forward_encode(enc_inp, len_sorted.tolist(), adv_inp=True)
@@ -573,8 +573,8 @@ def main(params):
                 gen_lens, char_outs, gen_samples, rev_gen_lens, rev_char_outs = outs[3], outs[4], outs[-3], outs[-2], outs[-1]
                 len_sorted, gen_lensort_idx = rev_gen_lens.sort(dim=0, descending=True)
                 _, rev_sort_idx = gen_lensort_idx.sort(dim=0)
-                rev_sort_idx = Variable(rev_sort_idx, requires_grad=False)
-                gen_samples_srt = gen_samples.index_select(1, Variable(gen_lensort_idx, requires_grad=False))
+                rev_sort_idx = rev_sort_idx.requires_grad_(False)
+                gen_samples_srt = gen_samples.index_select(1, gen_lensort_idx.requires_grad_(False))
                 enc_inp = torch.cat([append_tensor, gen_samples_srt])
                 #reverse_inp = reverse_inp.detach()
                 rev_enc = modelGenEncoder.forward_encode(enc_inp, len_sorted.tolist(), adv_inp=True)
@@ -583,7 +583,7 @@ def main(params):
                 cyc_loss = params['cycle_loss_w'] * cycle_loss_func(rev_enc_orig_order, enc_inp_gt.detach())
             elif params['cycle_loss_type'] == 'ml':
                 rev_ml = outs[-1]
-                rev_mlTarg = pack_padded_sequence(Variable(targs).to(device), lens)
+                rev_mlTarg = pack_padded_sequence(targs.to(device), lens)
                 cyc_loss = params['cycle_loss_w']*ml_criterion(pack_padded_sequence(rev_ml,lens)[0], rev_mlTarg[0])
             else:
                 cyc_loss = 0.
@@ -591,13 +591,13 @@ def main(params):
             if params['language_loss']:
                 gen_samples, gen_lens, char_outs, = outs[2], outs[3], outs[4]
                 len_sorted, gen_lensort_idx = gen_lens.sort(dim=0, descending=True)
-                gen_samples_srt = gen_samples.index_select(1, Variable(gen_lensort_idx, requires_grad=False))
+                gen_samples_srt = gen_samples.index_select(1, gen_lensort_idx.requires_grad_(False))
                 enc_inp = torch.cat([append_tensor, gen_samples_srt])
                 n_steps = enc_inp.size(0);b_sz = enc_inp.size(1);
                 targ_aid = 1 - c_aid
                 langModelInp = enc_inp.view(n_steps*b_sz, -1).mm(mapVocabToLangModel[targ_aid]).view(n_steps, b_sz, -1)
                 langProb,_ = langModel[targ_aid].forward_mltrain(langModelInp, len_sorted.tolist(), langModelInp, len_sorted.tolist(), adv_targ=True)
-                langModelTarg = pack_padded_sequence(Variable(langModelInp.data[1:,:,:].max(dim=-1)[1]), len_sorted.tolist())
+                langModelTarg = pack_padded_sequence(langModelInp.data[1:,:,:].max(dim=-1)[1], len_sorted.tolist())
                 lang_loss = params['language_loss']*ml_criterion(pack_padded_sequence(langProb,len_sorted.tolist())[0], langModelTarg[0])
                 if lang_loss.item() >20:
                     print 'Limiting loss', lang_loss

@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
 from torch import tensor
 import torch.nn.functional as FN
 import numpy as np
@@ -65,41 +64,47 @@ class CharCNN(nn.Module):
         n_auth = self.num_outputs
         n_steps = x.size(0)
         b_sz = x.size(1)
+
+        prev_grad_enabled = torch.is_grad_enabled()
+        grad_enabled = prev_grad_enabled
+
         if not adv_inp:
             if predict_mode:
-                x = Variable(x,volatile=True).to(self.device)
+                grad_enabled = False
             else:
-                x = Variable(x).to(self.device)
+                grad_enabled = prev_grad_enabled
 
+            x = x.to(self.device)
             emb = self.enc_drop(self.encoder(x))
         else:
             emb = self.enc_drop(x.view(n_steps*b_sz,-1).mm(self.encoder.weight).view(n_steps,b_sz, -1))
 
-        W = self.decoder_W
-        # reshape and expand b to size (n_auth*n_steps*vocab_size)
-        b = self.decoder_b.expand(b_sz, self.num_outputs)
+        with torch.set_grad_enabled(grad_enabled):
+            W = self.decoder_W
+            # reshape and expand b to size (n_auth*n_steps*vocab_size)
+            b = self.decoder_b.expand(b_sz, self.num_outputs)
 
-        emb_sorted = emb.permute(1,2,0)
-        cnn_inp = [emb_sorted]
-        cnn_out = []
-        cnn_out_padded = []
-        for i in xrange(self.n_layers):
-            cnn_out.append([FN.leaky_relu(conv(cnn_inp[-1])) for conv in self.decoder_cnn[i]])
-            max_sz = cnn_out[-1][-1].size(2)
-            cnn_out_padded.append([FN.pad(cnn_out[-1][j].unsqueeze(3), (0,0,(max_sz-cnn_out[-1][j].size(2))//2,int(((max_sz-cnn_out[-1][j].size(2))/2. +0.5)//1))).squeeze(3) for j in xrange(len(cnn_out[-1]))])
-            cnn_inp.append(self.dec_drop(torch.cat(cnn_out_padded[-1], dim=1)))
-            if self.decoder_cnn_residual and i > 0 and (i%2)==0:
-                cnn_inp[-1] = cnn_inp[-1] + FN.pad(cnn_inp[-3].unsqueeze(3),(0,0,(max_sz-cnn_inp[-3].size(2)),0)).squeeze(3)
+            emb_sorted = emb.permute(1,2,0)
+            cnn_inp = [emb_sorted]
+            cnn_out = []
+            cnn_out_padded = []
+            for i in xrange(self.n_layers):
+                cnn_out.append([FN.leaky_relu(conv(cnn_inp[-1])) for conv in self.decoder_cnn[i]])
+                max_sz = cnn_out[-1][-1].size(2)
+                cnn_out_padded.append([FN.pad(cnn_out[-1][j].unsqueeze(3), (0,0,(max_sz-cnn_out[-1][j].size(2))//2,int(((max_sz-cnn_out[-1][j].size(2))/2. +0.5)//1))).squeeze(3) for j in xrange(len(cnn_out[-1]))])
+                cnn_inp.append(self.dec_drop(torch.cat(cnn_out_padded[-1], dim=1)))
+                if self.decoder_cnn_residual and i > 0 and (i%2)==0:
+                    cnn_inp[-1] = cnn_inp[-1] + FN.pad(cnn_inp[-3].unsqueeze(3),(0,0,(max_sz-cnn_inp[-3].size(2)),0)).squeeze(3)
 
 
-        dec_in = FN.max_pool1d(cnn_inp[-1], cnn_inp[-1].size(2)).squeeze(2)
+            dec_in = FN.max_pool1d(cnn_inp[-1], cnn_inp[-1].size(2)).squeeze(2)
 
-        enc_out = dec_in
+            enc_out = dec_in
 
-        dec_out = dec_in.mm(W) + b
-        if compute_softmax:
-            prob_out = self.softmax(dec_out.contiguous().view(-1, self.num_outputs))
-        else:
-            prob_out = dec_out
+            dec_out = dec_in.mm(W) + b
+            if compute_softmax:
+                prob_out = self.softmax(dec_out.contiguous().view(-1, self.num_outputs))
+            else:
+                prob_out = dec_out
 
         return prob_out, enc_out

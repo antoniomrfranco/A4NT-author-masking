@@ -1,4 +1,3 @@
-from torch.autograd import Variable
 import numpy as np
 from tqdm import tqdm
 import torch
@@ -228,7 +227,7 @@ def eval_translator(dp, model, params, char_to_ix, auth_to_ix, split='val', max_
             c_sz = len(b_data[0])
         inps, targs, auths, lens = dp.prepare_data(b_data[0], char_to_ix, auth_to_ix, maxlen=params['max_seq_len'])
         output, hidden = model.forward_mltrain(inps, lens, inps, lens, hidden_zero, compute_softmax=False, auths=auths)
-        targets = pack_padded_sequence(Variable(targs).to(params['device']),lens)
+        targets = pack_padded_sequence(targs.to(params['device']),lens)
         loss = criterion(pack_padded_sequence(output,lens)[0], targets[0])
         total_loss += loss.item()
 

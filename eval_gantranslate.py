@@ -9,7 +9,7 @@ from models.char_translator import CharTranslator
 from collections import defaultdict
 from utils.data_provider import DataProvider
 from utils.utils import repackage_hidden
-from torch.autograd import Variable, Function
+from torch.autograd import Function
 
 import torch
 import torch.nn as nn
