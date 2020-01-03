@@ -142,8 +142,8 @@ def eval_classify(dp, model, params, char_to_ix, auth_to_ix, split='val', max_do
             correct = correct + (current_doc_score.argmax() == auths[0])
             doc_correct[auths[0]] += (current_doc_score.argmax() == auths[0])
             doc_count[auths[0]] += 1.
-            mean_rank = mean_rank + np.where(current_doc_score.argsort()[::-1]==auths[0])[0][0]
-            correct_topk += (np.where(current_doc_score.argsort()[::-1]==auths[0])[0][0]<=params.get('topk',5)).sum()
+            mean_rank = mean_rank + np.where(current_doc_score.argsort()[::-1]==auths[0].item())[0][0]
+            correct_topk += (np.where(current_doc_score.argsort()[::-1]==auths[0].item())[0][0]<=params.get('topk',5)).sum()
             mean_corr_prob = mean_corr_prob + current_doc_score[auths[0]]
             mean_max_prob = mean_max_prob + current_doc_score.max()
             mean_min_prob = mean_min_prob + current_doc_score.min()
